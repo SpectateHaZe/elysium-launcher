@@ -49,6 +49,10 @@ pub struct InstanceConfig {
     pub last_played: Option<DateTime<Utc>>,
     #[serde(default)]
     pub playtime_secs: u64,
+    /// Theme material picked by the user (e.g. `amethyst`); drives the instance's colours
+    /// in the UI. `None` lets the UI pick one from the name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<String>,
     #[serde(default)]
     pub overrides: InstanceOverrides,
 }
@@ -154,6 +158,7 @@ impl InstanceManager {
                 created: Utc::now(),
                 last_played: None,
                 playtime_secs: 0,
+                material: None,
                 overrides: InstanceOverrides::default(),
             },
             id,

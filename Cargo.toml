@@ -1,12 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/elysium-core", "crates/elysium-app"]
+members = ["crates/elysium-core", "app/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/elysium-launcher/elysium-launcher"
 rust-version = "1.95"
 
 [profile.release]

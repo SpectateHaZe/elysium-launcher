@@ -1,0 +1,390 @@
+/* ---------------------------------------------------------------------------
+   Tokens. Colour roles (--md-*) are written at runtime by lib/theme.ts from the
+   focused instance's material. Registering the main ones lets them interpolate,
+   so switching instances re-tints the whole launcher smoothly.
+   ------------------------------------------------------------------------- */
+@property --md-primary { syntax: "<color>"; inherits: true; initial-value: #6750a4; }
+@property --md-on-primary { syntax: "<color>"; inherits: true; initial-value: #fff; }
+@property --md-primary-container { syntax: "<color>"; inherits: true; initial-value: #eaddff; }
+@property --md-on-primary-container { syntax: "<color>"; inherits: true; initial-value: #21005d; }
+@property --md-secondary-container { syntax: "<color>"; inherits: true; initial-value: #e8def8; }
+@property --md-on-secondary-container { syntax: "<color>"; inherits: true; initial-value: #1d192b; }
+@property --md-surface { syntax: "<color>"; inherits: true; initial-value: #fef7ff; }
+@property --md-surface-container-low { syntax: "<color>"; inherits: true; initial-value: #f7f2fa; }
+@property --md-surface-container { syntax: "<color>"; inherits: true; initial-value: #f3edf7; }
+@property --md-surface-container-high { syntax: "<color>"; inherits: true; initial-value: #ece6f0; }
+@property --md-surface-container-highest { syntax: "<color>"; inherits: true; initial-value: #e6e0e9; }
+@property --md-on-surface { syntax: "<color>"; inherits: true; initial-value: #1d1b20; }
+@property --md-on-surface-variant { syntax: "<color>"; inherits: true; initial-value: #49454f; }
+@property --md-outline-variant { syntax: "<color>"; inherits: true; initial-value: #cac4d0; }
+
+:root {
+  /* Apple-style neutrals. The instance colour is reserved for accents. */
+  --bg: #f5f5f7;
+  --card: #ffffff;
+  --fill: #e8e8ed;
+  --fill-strong: #d2d2d7;
+  --label: #1d1d1f;
+  --label-2: #6e6e73;
+  --label-3: #86868b;
+  --separator: rgb(0 0 0 / 0.08);
+  --chrome: rgb(245 245 247 / 0.72);
+  --shadow-card: 0 2px 10px rgb(0 0 0 / 0.04);
+  --shadow-float: 0 24px 64px rgb(0 0 0 / 0.18), 0 2px 8px rgb(0 0 0 / 0.06);
+  --glow: var(--md-primary-container);
+
+  --font: "Roboto Flex Variable", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Consolas", ui-monospace, "SF Mono", "DejaVu Sans Mono", monospace;
+
+  /* Motion: Material 3 emphasized easing. */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --theme-shift: 600ms;
+
+  /* Shape scale: each size has a job; nothing gets one radius "everywhere". */
+  --shape-xs: 4px;   /* snackbars, text fields */
+  --shape-s: 8px;    /* chips, menus */
+  --shape-m: 12px;   /* list highlights */
+  --shape-l: 16px;   /* selected tiles */
+  --shape-xl: 28px;  /* hero, dialogs, tiles */
+  --shape-full: 999px;
+}
+
+/* Only animate re-tints after the first scheme is in place (see App.svelte). */
+:root.theme-ready {
+  transition:
+    --md-primary var(--theme-shift) var(--ease),
+    --md-on-primary var(--theme-shift) var(--ease),
+    --md-primary-container var(--theme-shift) var(--ease),
+    --md-on-primary-container var(--theme-shift) var(--ease),
+    --md-secondary-container var(--theme-shift) var(--ease),
+    --md-on-secondary-container var(--theme-shift) var(--ease),
+    --md-surface var(--theme-shift) var(--ease),
+    --md-surface-container-low var(--theme-shift) var(--ease),
+    --md-surface-container var(--theme-shift) var(--ease),
+    --md-surface-container-high var(--theme-shift) var(--ease),
+    --md-surface-container-highest var(--theme-shift) var(--ease),
+    --md-on-surface var(--theme-shift) var(--ease),
+    --md-on-surface-variant var(--theme-shift) var(--ease),
+    --md-outline-variant var(--theme-shift) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --theme-shift: 0ms; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #000000;
+  --card: #1c1c1e;
+  --fill: #2c2c2e;
+  --fill-strong: #3a3a3c;
+  --label: #f5f5f7;
+  --label-2: #a1a1a6;
+  --label-3: #6e6e73;
+  --separator: rgb(255 255 255 / 0.12);
+  --chrome: rgb(22 22 23 / 0.72);
+  --shadow-card: none;
+  --shadow-float: 0 24px 64px rgb(0 0 0 / 0.6);
+  --glow: color-mix(in srgb, var(--md-primary) 32%, transparent);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--label);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 22px;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+#app { height: 100%; }
+
+/* Type scale: heavy, tight display type in the manner of Apple's product pages. */
+.display {
+  font-size: clamp(56px, 7.4vw, 104px);
+  line-height: 0.94;
+  font-weight: 760;
+  font-stretch: 100%;
+  letter-spacing: -0.042em;
+  margin: 0;
+  text-wrap: balance;
+}
+.headline { font-size: 48px; line-height: 1.04; font-weight: 740; letter-spacing: -0.035em; margin: 0; }
+.title-l { font-size: 26px; line-height: 32px; font-weight: 760; letter-spacing: -0.025em; margin: 0; }
+.title-m { font-size: 17px; line-height: 22px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+.subhead { font-size: 21px; line-height: 28px; font-weight: 500; letter-spacing: -0.012em; margin: 0; text-wrap: pretty; }
+.body-l { font-size: 17px; line-height: 25px; margin: 0; letter-spacing: -0.008em; }
+.body-m { font-size: 15px; line-height: 21px; margin: 0; }
+.body-s { font-size: 13px; line-height: 18px; margin: 0; }
+.label-l { font-size: 15px; line-height: 20px; font-weight: 600; }
+.muted { color: var(--label-2); }
+
+.icon {
+  font-family: "Material Symbols Rounded";
+  font-weight: 500;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  white-space: nowrap;
+  direction: ltr;
+  font-feature-settings: "liga";
+  font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+.icon.filled { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24; }
+
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--md-primary) 70%, transparent); outline-offset: 2px; }
+
+/* Hover feedback for custom controls. */
+.state { transition: filter 150ms linear, transform 150ms var(--ease), background-color 150ms linear; }
+.state:hover { filter: brightness(0.96); }
+:root[data-theme="dark"] .state:hover { filter: brightness(1.18); }
+.state:active { transform: scale(0.97); }
+
+/* ---------------------------------------------------------------------------
+   Buttons: pills. Filled buttons carry the instance colour.
+   ------------------------------------------------------------------------- */
+.btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--shape-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--md-primary);
+  background: transparent;
+}
+.btn .icon { font-size: 20px; margin-left: -4px; }
+.btn:disabled { cursor: default; opacity: 0.4; filter: none; transform: none; }
+.btn.filled { background: var(--md-primary); color: var(--md-on-primary); }
+.btn.tonal { background: var(--fill); color: var(--label); }
+.btn.outlined { background: var(--fill); color: var(--label); }
+.btn.text { padding: 0 12px; }
+.btn.danger { color: #ff3b30; }
+.btn.danger.filled { background: #ff3b30; color: #fff; }
+.btn.xl { height: 56px; padding: 0 34px 0 28px; font-size: 19px; font-weight: 720; gap: 10px; }
+.btn.xl .icon { font-size: 28px; margin-left: 0; }
+
+.icon-btn {
+  appearance: none;
+  border: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--shape-full);
+  display: inline-grid;
+  place-items: center;
+  background: transparent;
+  color: var(--label-2);
+  cursor: pointer;
+  flex: none;
+}
+.icon-btn:hover { background: var(--fill); color: var(--label); }
+.icon-btn.tonal { background: var(--fill); color: var(--label); }
+.icon-btn.lg { width: 56px; height: 56px; }
+.icon-btn.lg .icon { font-size: 26px; }
+.icon-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ---------------------------------------------------------------------------
+   Text fields: filled, rounded, floating label.
+   ------------------------------------------------------------------------- */
+.field { position: relative; display: block; }
+.field input {
+  width: 100%;
+  height: 56px;
+  padding: 20px 16px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--label);
+  font: inherit;
+  font-size: 17px;
+  outline: none;
+  user-select: text;
+  transition: box-shadow 150ms linear;
+}
+.field input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-primary) 55%, transparent); }
+.field.invalid input { box-shadow: 0 0 0 2px #ff3b30; }
+.field .float {
+  position: absolute;
+  left: 16px;
+  top: 17px;
+  font-size: 17px;
+  color: var(--label-3);
+  pointer-events: none;
+  transform-origin: left top;
+  transition: transform 150ms var(--ease);
+}
+.field input:focus + .float,
+.field input:not(:placeholder-shown) + .float { transform: translateY(-9px) scale(0.72); font-weight: 600; }
+.field .support { display: block; padding: 6px 4px 0; font-size: 13px; line-height: 18px; color: var(--label-2); }
+.field.invalid .support { color: #ff3b30; }
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px 0 10px;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--label-3);
+}
+.search .icon { font-size: 20px; }
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  user-select: text;
+}
+.search input::placeholder { color: var(--label-3); }
+.search:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-primary) 55%, transparent); }
+
+/* ---------------------------------------------------------------------------
+   iOS-style switch, tinted with the instance colour.
+   ------------------------------------------------------------------------- */
+.switch {
+  appearance: none;
+  position: relative;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  flex: none;
+  border-radius: var(--shape-full);
+  background: var(--fill-strong);
+  cursor: pointer;
+  transition: background-color 250ms var(--ease);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+  transition: left 250ms var(--ease), width 200ms var(--ease);
+}
+.switch:checked { background: var(--md-primary); }
+.switch:checked::after { left: 22px; }
+.switch:active::after { width: 33px; }
+.switch:checked:active::after { left: 16px; }
+
+/* ---------------------------------------------------------------------------
+   Slider: thin track, white knob.
+   ------------------------------------------------------------------------- */
+.slider {
+  --pct: 50%;
+  appearance: none;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--shape-full);
+  background: linear-gradient(to right, var(--md-primary) 0 var(--pct), var(--fill-strong) var(--pct));
+}
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.18), 0 0 0 0.5px rgb(0 0 0 / 0.08);
+}
+.slider:focus-visible { outline: none; }
+.slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--md-primary) 55%, transparent); }
+
+/* ---------------------------------------------------------------------------
+   Filter pills and segmented control.
+   ------------------------------------------------------------------------- */
+.chip {
+  appearance: none;
+  border: 0;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: var(--shape-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--label);
+  background: var(--fill);
+  cursor: pointer;
+}
+.chip .icon { font-size: 18px; margin-left: -4px; }
+.chip[aria-pressed="true"] { background: var(--label); color: var(--bg); }
+
+.segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: 10px; background: var(--fill); }
+.segmented button {
+  appearance: none;
+  border: 0;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--label);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+.segmented button[aria-pressed="true"] { background: var(--card); box-shadow: 0 3px 8px rgb(0 0 0 / 0.12), 0 0 0 0.5px rgb(0 0 0 / 0.04); }
+:root[data-theme="dark"] .segmented button[aria-pressed="true"] { background: #636366; }
+.segmented .icon { font-size: 18px; }
+
+/* Inset grouped lists (settings, accounts). */
+.group { background: var(--card); border-radius: 20px; padding: 4px 20px; box-shadow: var(--shadow-card); }
+
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--label) 22%, transparent);
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
