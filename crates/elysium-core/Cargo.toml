@@ -1,0 +1,29 @@
+[package]
+name = "elysium-core"
+description = "Core library for Elysium Launcher: Minecraft metadata, installation and launching"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bytes = "1.12.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+dirs = "7.0.0"
+futures = "0.3.34"
+md-5 = "0.11.0"
+md5 = { version = "0.11.0", package = "md-5" }
+regex = "1.13.1"
+reqwest = { version = "0.13.5", features = ["json", "stream"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha1 = "0.11.0"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "fs", "process", "io-util", "sync", "macros", "time"] }
+tracing = "0.1.44"
+uuid = { version = "1.29.0", features = ["v3", "v4", "serde"] }
+zip = "9.4.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }

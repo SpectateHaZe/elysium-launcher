@@ -1,0 +1,18 @@
+[package]
+name = "elysium-launcher"
+description = "Elysium Launcher: a fast, modern Minecraft launcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono = "0.4.45"
+eframe = { version = "0.37.0", default-features = false, features = ["accesskit", "default_fonts", "glow", "wayland", "x11", "clipboard", "links"] }
+elysium-core = { version = "0.1.0", path = "../elysium-core" }
+open = "5.4.5"
+rfd = "0.17.2"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "sync", "time"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uuid = "1.29.0"
