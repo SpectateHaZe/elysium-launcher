@@ -1,0 +1,364 @@
+/* ---------------------------------------------------------------------------
+   Tokens. Colours are written at runtime by lib/theme.ts from the chosen palette
+   and accent. Registering them lets them interpolate, so theme changes cross-fade.
+   ------------------------------------------------------------------------- */
+@property --bg { syntax: "<color>"; inherits: true; initial-value: #f5f5f7; }
+@property --card { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+@property --fill { syntax: "<color>"; inherits: true; initial-value: #e8e8ed; }
+@property --fill-strong { syntax: "<color>"; inherits: true; initial-value: #d2d2d7; }
+@property --label { syntax: "<color>"; inherits: true; initial-value: #1d1d1f; }
+@property --label-2 { syntax: "<color>"; inherits: true; initial-value: #6e6e73; }
+@property --label-3 { syntax: "<color>"; inherits: true; initial-value: #86868b; }
+@property --accent { syntax: "<color>"; inherits: true; initial-value: #007aff; }
+@property --accent-soft { syntax: "<color>"; inherits: true; initial-value: #e5f0ff; }
+@property --on-accent { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+
+:root {
+  /* Colour tokens (--bg, --card, --accent, …) are set at runtime by lib/theme.ts. */
+  --shadow-card: 0 2px 10px rgb(0 0 0 / 0.04);
+  --shadow-float: 0 24px 64px rgb(0 0 0 / 0.18), 0 2px 8px rgb(0 0 0 / 0.06);
+
+  /* SF Pro where the OS has it (macOS), Inter (its closest open relative) elsewhere. */
+  --font: "Inter Variable", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Consolas", ui-monospace, "SF Mono", "DejaVu Sans Mono", monospace;
+
+  /* Motion: the curve iOS uses for sheets and navigation. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --theme-shift: 600ms;
+
+  /* Corner radii: larger containers get larger, softer corners. */
+  --shape-s: 8px;
+  --shape-m: 12px;
+  --shape-l: 16px;
+  --shape-xl: 28px;
+  --shape-full: 999px;
+}
+
+/* Only animate colour changes after the first theme is applied (see App.svelte). */
+:root.theme-ready {
+  transition:
+    --bg var(--theme-shift) var(--ease),
+    --card var(--theme-shift) var(--ease),
+    --fill var(--theme-shift) var(--ease),
+    --fill-strong var(--theme-shift) var(--ease),
+    --label var(--theme-shift) var(--ease),
+    --label-2 var(--theme-shift) var(--ease),
+    --label-3 var(--theme-shift) var(--ease),
+    --accent var(--theme-shift) var(--ease),
+    --accent-soft var(--theme-shift) var(--ease),
+    --on-accent var(--theme-shift) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --theme-shift: 0ms; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Neutral tokens come from the palette; only depth differs here. */
+:root[data-theme="dark"] {
+  --shadow-card: none;
+  --shadow-float: 0 24px 64px rgb(0 0 0 / 0.6);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--label);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 22px;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+#app { height: 100%; }
+
+/* Type scale: heavy, tight display type in the manner of Apple's product pages. */
+.display {
+  font-size: clamp(56px, 7.2vw, 100px);
+  line-height: 0.98;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  margin: 0;
+  text-wrap: balance;
+}
+.headline { font-size: 48px; line-height: 1.06; font-weight: 700; letter-spacing: -0.03em; margin: 0; }
+.title-l { font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.022em; margin: 0; }
+.title-m { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.012em; margin: 0; }
+.subhead { font-size: 21px; line-height: 28px; font-weight: 500; letter-spacing: -0.012em; margin: 0; text-wrap: pretty; }
+.body-l { font-size: 17px; line-height: 25px; margin: 0; letter-spacing: -0.008em; }
+.body-m { font-size: 15px; line-height: 21px; margin: 0; }
+.body-s { font-size: 13px; line-height: 18px; margin: 0; }
+.label-l { font-size: 15px; line-height: 20px; font-weight: 600; }
+.muted { color: var(--label-2); }
+
+.icon {
+  font-family: "Material Symbols Rounded";
+  font-weight: 500;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  white-space: nowrap;
+  direction: ltr;
+  font-feature-settings: "liga";
+  font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+.icon.filled { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24; }
+
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 2px; }
+
+/* Hover feedback for custom controls. */
+.state { transition: filter 150ms linear, transform 150ms var(--ease), background-color 150ms linear; }
+.state:hover { filter: brightness(0.96); }
+:root[data-theme="dark"] .state:hover { filter: brightness(1.18); }
+.state:active { transform: scale(0.97); }
+
+/* ---------------------------------------------------------------------------
+   Buttons: pills. Filled buttons carry the instance colour.
+   ------------------------------------------------------------------------- */
+.btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--shape-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--accent);
+  background: transparent;
+}
+.btn .icon { font-size: 20px; margin-left: -4px; }
+.btn:disabled { cursor: default; opacity: 0.4; filter: none; transform: none; }
+.btn.filled { background: var(--accent); color: var(--on-accent); }
+.btn.tonal { background: var(--fill); color: var(--label); }
+.btn.outlined { background: var(--fill); color: var(--label); }
+.btn.text { padding: 0 12px; }
+.btn.danger { color: #ff3b30; }
+.btn.danger.filled { background: #ff3b30; color: #fff; }
+.btn.xl { height: 56px; padding: 0 34px 0 28px; font-size: 19px; font-weight: 720; gap: 10px; }
+.btn.xl .icon { font-size: 28px; margin-left: 0; }
+
+.icon-btn {
+  appearance: none;
+  border: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--shape-full);
+  display: inline-grid;
+  place-items: center;
+  background: transparent;
+  color: var(--label-2);
+  cursor: pointer;
+  flex: none;
+}
+.icon-btn:hover { background: var(--fill); color: var(--label); }
+.icon-btn.tonal { background: var(--fill); color: var(--label); }
+.icon-btn.lg { width: 56px; height: 56px; }
+.icon-btn.lg .icon { font-size: 26px; }
+.icon-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ---------------------------------------------------------------------------
+   Text fields: filled, rounded, floating label.
+   ------------------------------------------------------------------------- */
+.field { position: relative; display: block; }
+.field input {
+  width: 100%;
+  height: 56px;
+  padding: 20px 16px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--label);
+  font: inherit;
+  font-size: 17px;
+  outline: none;
+  user-select: text;
+  transition: box-shadow 150ms linear;
+}
+.field input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent); }
+.field.invalid input { box-shadow: 0 0 0 2px #ff3b30; }
+.field .float {
+  position: absolute;
+  left: 16px;
+  top: 17px;
+  font-size: 17px;
+  color: var(--label-3);
+  pointer-events: none;
+  transform-origin: left top;
+  transition: transform 150ms var(--ease);
+}
+.field input:focus + .float,
+.field input:not(:placeholder-shown) + .float { transform: translateY(-9px) scale(0.72); font-weight: 600; }
+.field .support { display: block; padding: 6px 4px 0; font-size: 13px; line-height: 18px; color: var(--label-2); }
+.field.invalid .support { color: #ff3b30; }
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px 0 10px;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--label-3);
+}
+.search .icon { font-size: 20px; }
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--label);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  user-select: text;
+}
+.search input::placeholder { color: var(--label-3); }
+.search:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent); }
+
+/* ---------------------------------------------------------------------------
+   iOS-style switch, tinted with the instance colour.
+   ------------------------------------------------------------------------- */
+.switch {
+  appearance: none;
+  position: relative;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  flex: none;
+  border-radius: var(--shape-full);
+  background: var(--fill-strong);
+  cursor: pointer;
+  transition: background-color 250ms var(--ease);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+  transition: left 250ms var(--ease), width 200ms var(--ease);
+}
+.switch:checked { background: var(--accent); }
+.switch:checked::after { left: 22px; }
+.switch:active::after { width: 33px; }
+.switch:checked:active::after { left: 16px; }
+
+/* ---------------------------------------------------------------------------
+   Slider: thin track, white knob.
+   ------------------------------------------------------------------------- */
+.slider {
+  --pct: 50%;
+  appearance: none;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--shape-full);
+  background: linear-gradient(to right, var(--accent) 0 var(--pct), var(--fill-strong) var(--pct));
+}
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.18), 0 0 0 0.5px rgb(0 0 0 / 0.08);
+}
+.slider:focus-visible { outline: none; }
+.slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent); }
+
+/* ---------------------------------------------------------------------------
+   Filter pills and segmented control.
+   ------------------------------------------------------------------------- */
+.chip {
+  appearance: none;
+  border: 0;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: var(--shape-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--label);
+  background: var(--fill);
+  cursor: pointer;
+}
+.chip .icon { font-size: 18px; margin-left: -4px; }
+.chip[aria-pressed="true"],
+.chip[aria-checked="true"] { background: var(--label); color: var(--bg); }
+
+.segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: 10px; background: var(--fill); }
+.segmented button {
+  appearance: none;
+  border: 0;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--label);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 200ms var(--ease), box-shadow 200ms var(--ease);
+}
+.segmented button[aria-pressed="true"] { background: var(--card); box-shadow: 0 3px 8px rgb(0 0 0 / 0.12), 0 0 0 0.5px rgb(0 0 0 / 0.04); }
+:root[data-theme="dark"] .segmented button[aria-pressed="true"] { background: #636366; }
+.segmented .icon { font-size: 18px; }
+
+/* Inset grouped lists (settings, accounts). */
+.group { background: var(--card); border-radius: 20px; padding: 4px 20px; box-shadow: var(--shadow-card); }
+
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--label) 22%, transparent);
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+:root[data-reduce-transparency="true"] * { backdrop-filter: none !important; }
+:root[data-platform="macos"] { --font: -apple-system, BlinkMacSystemFont, "Inter Variable", sans-serif; }
