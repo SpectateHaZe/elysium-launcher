@@ -1,6 +1,8 @@
 <script lang="ts">
   import { app } from "../lib/store.svelte";
-  import { errorText, type VersionType } from "../lib/api";
+  import { api, errorText, LOADER_NAMES, type Loader, type LoaderVersion, type PackImport, type VersionType } from "../lib/api";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { finishPackImport } from "../lib/install.svelte";
   import { date } from "../lib/format";
   import { MATERIALS } from "../lib/theme";
   import MaterialPicker from "./MaterialPicker.svelte";
@@ -19,6 +21,56 @@
   let material = $state(MATERIALS[Math.floor(Math.random() * MATERIALS.length)]!.id);
   let busy = $state(false);
   let error = $state<string | null>(null);
+  let loader = $state<Loader>("vanilla");
+  let loaderVersions = $state<LoaderVersion[] | null>(null);
+  let loaderVersion = $state<string | null>(null);
+  let loaderError = $state<string | null>(null);
+  let horizonMc = $state("26.3");
+
+  const loaders: Loader[] = ["vanilla", "fabric", "quilt", "forge", "neoforge"];
+  const horizon = $derived(loader === "horizon");
+  const mcVersion = $derived(horizon ? horizonMc : version);
+
+  $effect(() => {
+    if (horizon) void api.horizonMinecraft().then((v) => (horizonMc = v));
+  });
+
+  // Loader versions for the chosen Minecraft version.
+  $effect(() => {
+    const l = loader;
+    const v = version;
+    loaderVersions = null;
+    loaderVersion = null;
+    loaderError = null;
+    if (l === "vanilla" || l === "horizon" || !v) return;
+    let current = true;
+    api.loaderVersions(l, v)
+      .then((list) => {
+        if (!current) return;
+        loaderVersions = list;
+        loaderVersion = (list.find((x) => x.stable) ?? list[0])?.version ?? null;
+      })
+      .catch((e) => current && (loaderError = errorText(e)));
+    return () => {
+      current = false;
+    };
+  });
+
+  async function importPack() {
+    const path = await openDialog({ title: "Import a modpack", multiple: false, filters: [{ name: "Modpacks", extensions: ["mrpack", "zip"] }] });
+    if (typeof path !== "string") return;
+    try {
+      const job = await api.importPackFile(path);
+      app.dialog = null;
+      app.watchJob(job, (j) => {
+        void app.dismissJob(j.id);
+        if (j.state.kind === "failed") app.toast(j.state.message);
+        else if (j.state.kind === "done") void finishPackImport(j.state.result as PackImport, "The pack");
+      });
+    } catch (e) {
+      error = errorText(e);
+    }
+  }
 
   const list = $derived.by(() => {
     const q = query.trim().toLowerCase();
@@ -35,11 +87,14 @@
 
   async function create(e: SubmitEvent) {
     e.preventDefault();
-    if (!version) return;
+    const mc = mcVersion;
+    if (!mc) return;
+    if (loader !== "vanilla" && !horizon && !loaderVersion) return;
     busy = true;
     error = null;
     try {
-      await app.createInstance(name.trim() || `Minecraft ${version}`, version, material);
+      const fallback = horizon ? "Horizon" : loader === "vanilla" ? `Minecraft ${mc}` : `${LOADER_NAMES[loader]} ${mc}`;
+      await app.createInstance(name.trim() || fallback, mc, material, loader, horizon ? null : loaderVersion);
       app.dialog = null;
     } catch (err) {
       error = errorText(err);
@@ -60,9 +115,31 @@
     <!-- svelte-ignore a11y_autofocus -->
     <input bind:value={name} placeholder=" " maxlength="64" autofocus />
     <span class="float">Name</span>
-    <span class="support">{name.trim() ? "" : `Leave empty to call it “Minecraft ${version ?? ""}”.`}</span>
+    <span class="support">{name.trim() ? "" : `Leave empty to call it “${horizon ? "Horizon" : loader === "vanilla" ? `Minecraft ${version ?? ""}` : `${LOADER_NAMES[loader]} ${version ?? ""}`}”.`}</span>
   </label>
 
+  <div class="loaders" role="radiogroup" aria-label="Loader">
+    {#each loaders as l (l)}
+      <button type="button" class="chip state" role="radio" aria-checked={loader === l} onclick={() => (loader = l)}>{LOADER_NAMES[l]}</button>
+    {/each}
+    {#if app.horizonSupported}
+      <span class="divider" aria-hidden="true"></span>
+      <button type="button" class="chip state horizon-chip" role="radio" aria-checked={horizon} onclick={() => (loader = "horizon")}>
+        <span class="icon">bolt</span>Horizon
+      </button>
+    {/if}
+  </div>
+
+  {#if horizon}
+    <div class="horizon group">
+      <p class="title-m">Horizon, Minecraft {horizonMc} rewritten in Rust</p>
+      <p class="body-m muted">
+        An independent, open-source reimplementation of the game. It runs from your own Minecraft files, so it needs a
+        Microsoft account that owns Java Edition. Elysium downloads it, checks its signature, and keeps it up to date.
+        Java mods don't work in Horizon.
+      </p>
+    </div>
+  {:else}
   <div class="versions">
     <div class="filters" role="group" aria-label="Version type">
       {#each filters as f (f.type)}
@@ -112,6 +189,26 @@
     </div>
   </div>
 
+  {#if loader !== "vanilla"}
+    <div class="loader-version">
+      <span class="title-m">{LOADER_NAMES[loader]} version</span>
+      {#if loaderError}
+        <span class="body-m error">{loaderError}</span>
+      {:else if loaderVersions === null}
+        <span class="body-m muted">Loading</span>
+      {:else if loaderVersions.length === 0}
+        <span class="body-m muted">{LOADER_NAMES[loader]} isn't available for Minecraft {version}.</span>
+      {:else}
+        <select bind:value={loaderVersion} aria-label="{LOADER_NAMES[loader]} version">
+          {#each loaderVersions.slice(0, 200) as lv (lv.version)}
+            <option value={lv.version}>{lv.version}{lv.stable ? "" : " (beta)"}</option>
+          {/each}
+        </select>
+      {/if}
+    </div>
+  {/if}
+  {/if}
+
   <div>
     <h3 class="title-m">Block</h3>
     <div class="picker"><MaterialPicker value={material} onchange={(m) => (material = m)} /></div>
@@ -120,8 +217,9 @@
   {#if error}<p class="body-m error" role="alert">{error}</p>{/if}
 
   <div class="buttons">
+    <button type="button" class="btn text state import" onclick={importPack}><span class="icon">upload_file</span>Import pack</button>
     <button type="button" class="btn text state" onclick={close}>Cancel</button>
-    <button type="submit" class="btn filled state" disabled={!version || busy}>{busy ? "Creating" : "Create"}</button>
+    <button type="submit" class="btn filled state" disabled={!mcVersion || busy || (loader !== "vanilla" && !horizon && !loaderVersion)}>{busy ? "Creating" : "Create"}</button>
   </div>
 </form>
 </div>
@@ -192,6 +290,18 @@
   .dialog-title { font-size: 36px; }
   .picker :global(.swatch) { width: 44px; height: 44px; }
   .buttons { display: flex; justify-content: flex-end; gap: 8px; }
+  .buttons .import { margin-right: auto; }
+  .loaders { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .divider { width: 1px; height: 22px; background: var(--separator); margin: 0 4px; }
+  .horizon-chip .icon { color: #ff9f0a; }
+  .horizon-chip[aria-checked="true"] .icon { color: inherit; }
+  .horizon { padding: 16px 20px; background: var(--bg); display: flex; flex-direction: column; gap: 6px; }
+  .loader-version { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .loader-version select {
+    appearance: none; height: 36px; padding: 0 34px 0 14px; border: 0; border-radius: 10px; min-width: 200px;
+    background: var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%2386868b' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+    color: var(--label); font: inherit; font-weight: 600; cursor: pointer;
+  }
   @keyframes fade { from { opacity: 0; } }
   @keyframes rise { from { opacity: 0; transform: translate(-50%, calc(-50% + 24px)) scale(0.98); } }
 </style>

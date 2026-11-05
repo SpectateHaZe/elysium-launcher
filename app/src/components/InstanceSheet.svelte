@@ -2,7 +2,19 @@
 <script lang="ts">
   import { app, isActive } from "../lib/store.svelte";
   import { materialFor } from "../lib/theme";
-  import type { Instance, Overrides } from "../lib/api";
+  import { api, errorText, type Instance, type Overrides } from "../lib/api";
+  import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+
+  async function exportPack() {
+    const path = await saveDialog({ title: "Export as Modrinth pack", defaultPath: `${inst.name}.mrpack`, filters: [{ name: "Modrinth pack", extensions: ["mrpack"] }] });
+    if (!path) return;
+    try {
+      await api.exportPack(inst.id, path);
+      app.toast(`Exported ${inst.name}`);
+    } catch (e) {
+      app.toast(errorText(e));
+    }
+  }
   import MaterialPicker from "./MaterialPicker.svelte";
   import MemoryFields from "./MemoryFields.svelte";
   import JavaField from "./JavaField.svelte";
@@ -146,6 +158,11 @@
     <section>
       <h3 class="title-m">Maintenance</h3>
       <div class="group">
+      {#if inst.loader !== "horizon"}
+        <Row title="Export as a Modrinth pack" description="Share this instance as a .mrpack others can import">
+          <button class="btn tonal state" onclick={exportPack}>Export</button>
+        </Row>
+      {/if}
       <Row title="Repair files" description="Re-checks every game file, downloads anything damaged, then starts the game">
         <button class="btn outlined state" disabled={running} onclick={() => { close(); void app.play(inst.id, true); }}>Repair</button>
       </Row>

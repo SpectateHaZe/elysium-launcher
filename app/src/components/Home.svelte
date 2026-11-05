@@ -3,7 +3,7 @@
   import { glowColor, materialFor, tileColor } from "../lib/theme";
   import { theme } from "../lib/dark.svelte";
   import { duration, relative, date } from "../lib/format";
-  import { api } from "../lib/api";
+  import { api, LOADER_NAMES } from "../lib/api";
   import Block from "./Block.svelte";
   import WavyProgress from "./WavyProgress.svelte";
 
@@ -54,7 +54,9 @@
   {#if inst}
     <section class="hero" aria-label={inst.name} style:--glow={glowColor(material, theme.dark)}>
       <div class="copy">
-        <p class="version">Minecraft {inst.game_version}</p>
+        <p class="version">
+          {#if inst.loader === "horizon"}Horizon, Minecraft {inst.game_version} in Rust{:else}Minecraft {inst.game_version}{inst.loader !== "vanilla" ? ` with ${LOADER_NAMES[inst.loader]}` : ""}{/if}
+        </p>
         <h1 class="display">{inst.name}</h1>
 
         <div class="status" aria-live="polite">
@@ -85,6 +87,11 @@
           <button class="icon-btn lg tonal state" title="Instance settings" aria-label="Instance settings" onclick={() => (app.sheetOpen = true)}>
             <span class="icon">tune</span>
           </button>
+          {#if inst.loader !== "horizon"}
+            <button class="icon-btn lg tonal state" title="Mods and packs" aria-label="Mods and packs" onclick={() => (app.route = { name: "content", id: inst.id })}>
+              <span class="icon">extension</span>
+            </button>
+          {/if}
           <button class="icon-btn lg tonal state" title="Game log" aria-label="Game log" onclick={() => (app.route = { name: "logs", id: inst.id })}>
             <span class="icon">terminal</span>
           </button>
@@ -151,7 +158,7 @@
                 {#if running}<span class="live" title="Running"></span>{/if}
               </span>
               <span class="name title-m">{i.name}</span>
-              <span class="meta body-m muted">Minecraft {i.game_version}</span>
+              <span class="meta body-m muted">{i.loader === "horizon" ? "Horizon" : i.loader === "vanilla" ? `Minecraft ${i.game_version}` : `${i.game_version}, ${LOADER_NAMES[i.loader]}`}</span>
             </button>
           </li>
         {/each}

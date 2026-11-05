@@ -104,6 +104,10 @@ pub struct Settings {
     pub appearance: Appearance,
     /// Close the launcher window while the game is running.
     pub hide_on_launch: bool,
+    /// Azure application (client) ID used for Microsoft sign-in.
+    pub msa_client_id: String,
+    /// Install new Horizon nightlies automatically.
+    pub horizon_auto_update: bool,
 }
 
 impl Default for Settings {
@@ -118,6 +122,10 @@ impl Default for Settings {
             theme: Theme::System,
             appearance: Appearance::default(),
             hide_on_launch: false,
+            msa_client_id: option_env!("ELYSIUM_MSA_CLIENT_ID")
+                .unwrap_or_default()
+                .to_owned(),
+            horizon_auto_update: true,
         }
     }
 }

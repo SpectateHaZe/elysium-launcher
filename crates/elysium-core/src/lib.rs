@@ -5,18 +5,23 @@
 
 pub mod account;
 pub mod assets;
+pub mod auth;
+pub mod content;
 pub mod error;
 pub mod fsutil;
+pub mod horizon;
 pub mod http;
 pub mod install;
 pub mod instance;
 pub mod java;
 pub mod launch;
+pub mod loaders;
 pub mod logs;
 pub mod meta;
 pub mod paths;
 pub mod progress;
 pub mod rules;
+pub mod secrets;
 pub mod settings;
 pub mod versions;
 

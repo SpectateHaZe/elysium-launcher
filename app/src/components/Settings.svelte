@@ -1,12 +1,58 @@
 <script lang="ts">
   import { app } from "../lib/store.svelte";
-  import { api, type Settings } from "../lib/api";
+  import { api, errorText, type Settings } from "../lib/api";
   import MemoryFields from "./MemoryFields.svelte";
   import JavaField from "./JavaField.svelte";
   import Row from "./Row.svelte";
   import AppearanceSettings from "./AppearanceSettings.svelte";
 
   const s = $derived(app.settings!);
+
+  let cfKey = $state("");
+  let horizonBusy = $state(false);
+  let horizonText = $state("Checking");
+
+  $effect(() => {
+    if (!app.horizonSupported) return;
+    api.horizonStatus()
+      .then((st) => (horizonText = st.installed ? `${st.installed}${st.update_available ? `, ${st.latest} available` : ", up to date"}` : `Not installed yet${st.latest ? `, ${st.latest} available` : ""}`))
+      .catch((e) => (horizonText = errorText(e)));
+  });
+
+  async function updateHorizon() {
+    horizonBusy = true;
+    try {
+      const job = await api.horizonUpdate();
+      app.watchJob(job, (j) => {
+        horizonBusy = false;
+        void app.dismissJob(j.id);
+        if (j.state.kind === "failed") app.toast(j.state.message);
+        else if (j.state.kind === "done") {
+          horizonText = `${j.state.result as string}, up to date`;
+          app.toast(`Horizon ${j.state.result as string} is installed`);
+        }
+      });
+    } catch (e) {
+      horizonBusy = false;
+      app.toast(errorText(e));
+    }
+  }
+
+  async function saveKey(e: SubmitEvent) {
+    e.preventDefault();
+    try {
+      app.curseforgeConfigured = await api.setCurseforgeKey(cfKey);
+      cfKey = "";
+      app.toast("CurseForge key saved");
+    } catch (err) {
+      app.toast(errorText(err));
+    }
+  }
+
+  async function removeKey() {
+    app.curseforgeConfigured = await api.setCurseforgeKey("");
+    app.toast("CurseForge key removed");
+  }
 
   function set(patch: Partial<Settings>) {
     void app.saveSettings({ ...s, ...patch });
@@ -82,6 +128,46 @@
   </section>
 
   <section>
+    <h2 class="title-l">Accounts and services</h2>
+    <div class="group">
+      <Row title="Microsoft client ID" description="The Azure app ID Mojang approved for this launcher. Needed for Microsoft sign-in.">
+        {#snippet below()}
+          <label class="field">
+            <input value={s.msa_client_id} placeholder=" " spellcheck="false" autocomplete="off" onchange={(e) => set({ msa_client_id: e.currentTarget.value.trim() })} />
+            <span class="float">Application (client) ID</span>
+          </label>
+        {/snippet}
+      </Row>
+      <Row title="CurseForge API key" description={app.curseforgeConfigured ? "Saved in your system's credential store." : "Lets Discover search CurseForge. Get a key from the CurseForge for Studios console."}>
+        {#snippet below()}
+          <form class="key" onsubmit={saveKey}>
+            <label class="field">
+              <input type="password" bind:value={cfKey} placeholder=" " autocomplete="off" spellcheck="false" />
+              <span class="float">{app.curseforgeConfigured ? "Replace the saved key" : "API key"}</span>
+            </label>
+            <button class="btn filled state" type="submit" disabled={!cfKey.trim()}>Save</button>
+            {#if app.curseforgeConfigured}<button class="btn text danger state" type="button" onclick={removeKey}>Remove</button>{/if}
+          </form>
+        {/snippet}
+      </Row>
+    </div>
+  </section>
+
+  {#if app.horizonSupported}
+    <section>
+      <h2 class="title-l">Horizon</h2>
+      <div class="group">
+        <Row title="Update automatically" description="Install new signed Horizon builds before you play">
+          <input class="switch" type="checkbox" checked={s.horizon_auto_update} onchange={(e) => set({ horizon_auto_update: e.currentTarget.checked })} />
+        </Row>
+        <Row title="Installed build" description={horizonText}>
+          <button class="btn tonal state" disabled={horizonBusy} onclick={updateHorizon}>{horizonBusy ? "Checking" : "Check now"}</button>
+        </Row>
+      </div>
+    </section>
+  {/if}
+
+  <section>
     <h2 class="title-l">Downloads and storage</h2>
     <div class="group">
     <Row title="Parallel downloads" description="Lower this on slow or unreliable connections">
@@ -119,6 +205,8 @@
   .lead { padding: 14px 0 4px; }
   .size { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 360px; }
   .count { font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; font-weight: 700; }
+  .key { display: flex; gap: 8px; align-items: center; }
+  .key .field { flex: 1; }
   .version { margin: 40px 0 0 4px; }
   .group :global(.memory) { padding: 4px 0 16px; }
 </style>

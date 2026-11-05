@@ -4,18 +4,37 @@ A fast, modern Minecraft launcher written in Rust, with a Tauri desktop UI.
 
 ## Features
 
-- Every vanilla version, from the current release and snapshots back to `rd-132211`,
-  including the old asset layouts (`legacy`, `pre-1.6`) and legacy native libraries.
-- Automatic Java: each version gets the exact Mojang Java runtime it was built for.
-- Instances with their own game folder, memory, Java, JVM arguments and window size.
-- Live, colour-coded game log (log4j XML output is parsed back into readable lines).
-- Playtime and last-played tracking.
-- Offline accounts. Microsoft sign-in is planned.
-- Apple-style themes: light, dark or automatic; seven palettes plus a custom one built from
-  any tint; Apple system accent colours or your own; text size and reduced transparency.
+- **Every vanilla version**, from the newest snapshot back to `rd-132211`, including the old asset
+  layouts and native libraries.
+- **Mod loaders:** Fabric, Quilt, Forge and NeoForge, with every version they publish. Old Forge
+  (1.12.2 and earlier) is installed natively; newer Forge and NeoForge run their official installer.
+- **Discover:** search Modrinth and CurseForge together for mods, modpacks, resource packs, shaders
+  and data packs, filtered to the instance's Minecraft version and loader. Required dependencies are
+  installed too.
+- **CurseForge fallback chain:** when an author disables third-party downloads, the identical file is
+  fetched from Modrinth (matched by SHA-1); if it isn't there, the player downloads it from the
+  CurseForge page and the launcher picks it up from the Downloads folder, checking the hash.
+- **Modpacks:** install from Modrinth or CurseForge, import `.mrpack` and CurseForge zips, export any
+  instance as a `.mrpack`.
+- **Content manager:** enable, disable, remove and update installed mods, resource packs and shaders.
+- **Accounts:** Microsoft sign-in (device code), skins (view and upload), and offline accounts.
+  Refresh tokens are kept in the system credential store, never in plain files.
+- **Horizon:** start [Horizon](https://github.com/horizon-rust/horizon), the Rust reimplementation of
+  Java Edition, through its Launch API. Builds update automatically; every download is checked against
+  Horizon's Ed25519-signed checksums before it is installed. Horizon requires a Microsoft account that
+  owns Java Edition.
+- **Automatic Java:** each version gets the exact Mojang Java runtime it was built for.
+- **Instances** with their own memory, Java, JVM arguments and window size; live colour-coded game
+  log; playtime tracking.
+- **Apple-style themes:** light, dark or automatic; seven palettes plus a custom one built from any
+  tint; Apple system accents or your own; text size and reduced transparency.
 
-Planned: Microsoft accounts, Fabric/Quilt/Forge/NeoForge, Modrinth and CurseForge
-search for mods, modpacks, shaders and resource packs, and modpack import/export.
+## Setup
+
+- **Microsoft sign-in** needs an Azure application (client) ID that Mojang has approved for the
+  Minecraft services API. Enter it in Settings, or build with `ELYSIUM_MSA_CLIENT_ID=<id>`.
+- **CurseForge** needs an API key from the CurseForge for Studios console, entered in Settings.
+  Modrinth works without any key.
 
 ## Layout
 

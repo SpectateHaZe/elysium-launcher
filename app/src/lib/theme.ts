@@ -127,7 +127,10 @@ export function applyAppearance(a: Appearance, dark: boolean) {
   root.style.colorScheme = dark ? "dark" : "light";
   root.dataset.theme = dark ? "dark" : "light";
   root.dataset.reduceTransparency = String(a.reduce_transparency);
-  root.style.setProperty("zoom", String(TEXT_ZOOM[a.text_size] ?? 1));
+  const zoom = TEXT_ZOOM[a.text_size] ?? 1;
+  // Only zoom when needed: WebKit drops pixelated image scaling under any zoom.
+  if (zoom === 1) root.style.removeProperty("zoom");
+  else root.style.setProperty("zoom", String(zoom));
 }
 
 // ---------------------------------------------------------------------------

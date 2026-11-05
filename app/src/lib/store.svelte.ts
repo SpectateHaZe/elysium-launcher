@@ -5,6 +5,8 @@ import {
   errorText,
   type AccountStore,
   type Instance,
+  type Job,
+  type ManualDownload,
   type Overrides,
   type SessionView,
   type Settings,
@@ -14,6 +16,8 @@ import {
 export type Route =
   | { name: "home" }
   | { name: "logs"; id: string }
+  | { name: "content"; id: string }
+  | { name: "discover" }
   | { name: "accounts" }
   | { name: "settings" };
 
@@ -37,8 +41,17 @@ class AppState {
   manifest = $state<VersionManifest | null>(null);
   manifestError = $state<string | null>(null);
   snack = $state<Snack | null>(null);
-  dialog = $state<"new-instance" | "quit" | { delete: string } | null>(null);
+  dialog = $state<"new-instance" | "quit" | "msa" | { delete: string } | null>(null);
   sheetOpen = $state(false);
+  curseforgeConfigured = $state(false);
+  horizonSupported = $state(false);
+  jobs = $state<Job[]>([]);
+  /** Instance the Discover page installs into. */
+  targetId = $state<string | null>(null);
+  /** Files waiting to be downloaded by hand, per instance. */
+  manual = $state<{ instanceId: string; items: ManualDownload[] } | null>(null);
+  #jobPoll: ReturnType<typeof setTimeout> | null = null;
+  #jobHandlers = new Map<number, (job: Job) => void>();
 
   #poll: ReturnType<typeof setTimeout> | null = null;
   #snackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -54,6 +67,8 @@ class AppState {
       this.instances = b.instances;
       this.dataDir = b.data_dir;
       this.version = b.version;
+      this.curseforgeConfigured = b.curseforge_configured;
+      this.horizonSupported = b.horizon_supported;
       this.selectedId = b.instances[0]?.id ?? null;
       this.ready = true;
     } catch (e) {
@@ -98,6 +113,37 @@ class AppState {
     if (active) this.#poll = setTimeout(() => void this.pollSessions(), 300);
   }
 
+  /** Tracks a background job; `onDone` runs once when it finishes. */
+  watchJob(id: number, onDone?: (job: Job) => void) {
+    if (onDone) this.#jobHandlers.set(id, onDone);
+    void this.pollJobs();
+  }
+
+  async pollJobs() {
+    if (this.#jobPoll) clearTimeout(this.#jobPoll);
+    try {
+      this.jobs = await api.jobs();
+    } catch {
+      return;
+    }
+    for (const job of this.jobs) {
+      if (job.state.kind === "running") continue;
+      const handler = this.#jobHandlers.get(job.id);
+      if (handler) {
+        this.#jobHandlers.delete(job.id);
+        handler(job);
+      }
+    }
+    if (this.jobs.some((j) => j.state.kind === "running")) {
+      this.#jobPoll = setTimeout(() => void this.pollJobs(), 400);
+    }
+  }
+
+  async dismissJob(id: number) {
+    await api.jobDismiss(id);
+    this.jobs = this.jobs.filter((j) => j.id !== id);
+  }
+
   toast(text: string, action?: Snack["action"]) {
     if (this.#snackTimer) clearTimeout(this.#snackTimer);
     this.snack = { id: Date.now(), text, action };
@@ -127,8 +173,8 @@ class AppState {
     void this.pollSessions();
   }
 
-  async createInstance(name: string, version: string, material: string | null) {
-    const inst = await api.createInstance(name, version, material);
+  async createInstance(name: string, version: string, material: string | null, loader: Instance["loader"] = "vanilla", loaderVersion: string | null = null) {
+    const inst = await api.createInstance(name, version, material, loader, loaderVersion);
     await this.refreshInstances();
     this.selectedId = inst.id;
     this.route = { name: "home" };

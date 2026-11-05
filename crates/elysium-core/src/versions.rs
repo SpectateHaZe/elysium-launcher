@@ -38,6 +38,31 @@ pub fn cached_manifest(paths: &Paths) -> Result<Option<VersionManifest>> {
     fsutil::read_json(&manifest_cache(paths))
 }
 
+/// Loads `id` and everything it inherits from, merged into one launchable version.
+pub async fn resolve(
+    paths: &Paths,
+    http: &Http,
+    manifest: &VersionManifest,
+    id: &str,
+) -> Result<VersionJson> {
+    let mut version = load_version(paths, http, manifest, id).await?;
+    let mut depth = 0;
+    while let Some(parent_id) = version.inherits_from.clone() {
+        depth += 1;
+        if depth > 8 {
+            return Err(Error::Invalid(format!("{id} inherits too deeply")));
+        }
+        let parent = load_version(paths, http, manifest, &parent_id).await?;
+        let parent_inherits = parent.inherits_from.clone();
+        version = version.merge(parent);
+        version.inherits_from = parent_inherits;
+    }
+    if version.jar_id.is_none() {
+        version.jar_id = Some(version.id.clone());
+    }
+    Ok(version)
+}
+
 /// Loads the version JSON for `id`, downloading (and verifying) it when needed.
 pub async fn load_version(
     paths: &Paths,

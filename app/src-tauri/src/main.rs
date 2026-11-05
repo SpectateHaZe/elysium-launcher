@@ -4,6 +4,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod commands;
+mod jobs;
 mod sessions;
 
 use std::sync::Mutex;
@@ -45,6 +46,10 @@ fn init_state() -> Result<AppState, String> {
         settings: Mutex::new(settings),
         accounts: Mutex::new(accounts),
         sessions: Mutex::default(),
+        secrets: elysium_core::secrets::SecretStore::new(),
+        tokens: Mutex::default(),
+        jobs: crate::jobs::Jobs::default(),
+        msa: Mutex::default(),
         paths,
     })
 }
@@ -96,6 +101,32 @@ fn main() {
             commands::clear_logs,
             commands::stop,
             commands::launch,
+            commands::loader_versions,
+            commands::search,
+            commands::project,
+            commands::project_versions,
+            commands::install_content,
+            commands::install_pack,
+            commands::import_pack_file,
+            commands::export_pack,
+            commands::content_list,
+            commands::content_set_enabled,
+            commands::content_remove,
+            commands::content_updates,
+            commands::worlds,
+            commands::manual_check,
+            commands::open_url,
+            commands::jobs,
+            commands::job_cancel,
+            commands::job_dismiss,
+            commands::set_curseforge_key,
+            commands::msa_start,
+            commands::msa_status,
+            commands::msa_cancel,
+            commands::upload_skin,
+            commands::horizon_status,
+            commands::horizon_update,
+            commands::horizon_minecraft,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

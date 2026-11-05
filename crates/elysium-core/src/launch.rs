@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::oneshot;
 
-use crate::account::Account;
+use crate::account::LaunchSession;
 use crate::error::{IoContext, Result};
 use crate::install::Prepared;
 use crate::instance::Instance;
@@ -25,13 +25,17 @@ pub struct LaunchCommand {
     pub program: PathBuf,
     pub args: Vec<String>,
     pub cwd: PathBuf,
+    /// Extra environment variables.
+    pub env: Vec<(String, String)>,
+    /// Written to the game's stdin, then closed (Horizon reads its session this way).
+    pub stdin: Option<String>,
 }
 
 /// Builds the full Java command line for `instance`.
 pub fn build_command(
     prepared: &Prepared,
     instance: &Instance,
-    account: &Account,
+    session: &LaunchSession,
     settings: &EffectiveSettings,
 ) -> LaunchCommand {
     let version = &prepared.version;
@@ -49,23 +53,23 @@ pub fn build_command(
         .collect::<Vec<_>>()
         .join(sep);
     let path = |p: &std::path::Path| p.to_string_lossy().into_owned();
-    let uuid = account.uuid.simple().to_string();
+    let uuid = session.uuid.simple().to_string();
     let game_assets = prepared
         .legacy_assets_dir
         .clone()
         .unwrap_or_else(|| prepared.assets_root.clone());
 
     let mut vars: HashMap<&str, String> = HashMap::from([
-        ("auth_player_name", account.username.clone()),
+        ("auth_player_name", session.username.clone()),
         ("auth_uuid", uuid.clone()),
-        ("auth_access_token", account.access_token().to_owned()),
+        ("auth_access_token", session.access_token.clone()),
         (
             "auth_session",
-            format!("token:{}:{uuid}", account.access_token()),
+            format!("token:{}:{uuid}", session.access_token),
         ),
-        ("auth_xuid", "0".to_owned()),
+        ("auth_xuid", session.xuid.clone()),
         ("clientid", "0".to_owned()),
-        ("user_type", account.user_type().to_owned()),
+        ("user_type", session.user_type.to_owned()),
         ("user_properties", "{}".to_owned()),
         ("version_name", version.id.clone()),
         ("version_type", version.kind.as_arg().to_owned()),
@@ -74,10 +78,7 @@ pub fn build_command(
         ("game_assets", path(&game_assets)),
         ("assets_index_name", prepared.assets_index.clone()),
         ("natives_directory", path(&prepared.natives_dir)),
-        (
-            "library_directory",
-            path(&prepared.assets_root.with_file_name("libraries")),
-        ),
+        ("library_directory", path(&prepared.libraries_dir)),
         ("classpath", classpath),
         ("classpath_separator", sep.to_owned()),
         ("launcher_name", LAUNCHER_NAME.to_owned()),
@@ -143,6 +144,8 @@ pub fn build_command(
         program: prepared.java.clone(),
         args,
         cwd: game_dir,
+        env: Vec::new(),
+        stdin: None,
     }
 }
 
@@ -233,7 +236,12 @@ pub async fn run(
     let mut cmd = tokio::process::Command::new(&command.program);
     cmd.args(&command.args)
         .current_dir(&command.cwd)
-        .stdin(Stdio::null())
+        .envs(command.env.iter().map(|(k, v)| (k, v)))
+        .stdin(if command.stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         // The game must outlive the launcher if the user closes it mid-session.
@@ -242,6 +250,14 @@ pub async fn run(
 
     let started = Instant::now();
     let mut child = cmd.spawn().at(&command.program)?;
+    if let (Some(data), Some(mut stdin)) = (command.stdin.clone(), child.stdin.take()) {
+        use tokio::io::AsyncWriteExt;
+        // Dropping `stdin` closes it, which tells the game the input is complete.
+        stdin
+            .write_all(data.as_bytes())
+            .await
+            .at(&command.program)?;
+    }
     let mut readers = Vec::new();
     if let Some(out) = child.stdout.take() {
         readers.push(tokio::spawn(pump(BufReader::new(out), Arc::clone(&on_log))));
@@ -291,6 +307,7 @@ async fn pump<R: tokio::io::AsyncRead + Unpin>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::account::Account;
     use crate::instance::InstanceManager;
     use crate::settings::{Resolution, Settings};
 
@@ -304,6 +321,7 @@ mod tests {
             assets_index: "legacy".into(),
             legacy_assets_dir: Some(dir.join("assets/virtual/legacy")),
             logging_arg: Some("-Dlog4j.configurationFile=/cfg.xml".into()),
+            libraries_dir: dir.join("libraries"),
         }
     }
 
@@ -333,7 +351,7 @@ mod tests {
             width: 1280,
             height: 720,
         });
-        let cmd = build_command(&p, &inst, &account, &settings);
+        let cmd = build_command(&p, &inst, &LaunchSession::offline(&account), &settings);
         let args = cmd.args.join(" ");
 
         assert_eq!(cmd.args[0], "-Xms512M");
@@ -379,7 +397,9 @@ mod tests {
         );
         let account = Account::offline("Alex").unwrap();
         let settings = Settings::default().effective(&Default::default());
-        let args = build_command(&p, &inst, &account, &settings).args.join(" ");
+        let args = build_command(&p, &inst, &LaunchSession::offline(&account), &settings)
+            .args
+            .join(" ");
         assert!(!args.contains("--demo"));
         assert!(!args.contains("--width"), "no resolution set");
         assert_eq!(

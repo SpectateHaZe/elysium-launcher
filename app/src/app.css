@@ -320,7 +320,8 @@ html, body {
   cursor: pointer;
 }
 .chip .icon { font-size: 18px; margin-left: -4px; }
-.chip[aria-pressed="true"] { background: var(--label); color: var(--bg); }
+.chip[aria-pressed="true"],
+.chip[aria-checked="true"] { background: var(--label); color: var(--bg); }
 
 .segmented { display: inline-flex; padding: 2px; gap: 2px; border-radius: 10px; background: var(--fill); }
 .segmented button {

@@ -6,11 +6,12 @@
 
   const items = [
     { route: "home", icon: "home", label: "Home" },
+    { route: "discover", icon: "explore", label: "Discover" },
     { route: "accounts", icon: "account_circle", label: "Accounts" },
     { route: "settings", icon: "settings", label: "Settings" },
   ] as const;
 
-  const current = $derived(app.route.name === "logs" ? "home" : app.route.name);
+  const current = $derived(app.route.name === "logs" || app.route.name === "content" ? "home" : app.route.name);
   const mark = materialFor("amethyst");
 </script>
 

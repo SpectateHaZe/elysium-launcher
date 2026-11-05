@@ -16,11 +16,41 @@ const CONFIG_FILE: &str = "instance.json";
 /// playtime update from a finishing game can't race with a settings save from the UI.
 static WRITE_LOCK: Mutex<()> = Mutex::new(());
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ModLoader {
     #[default]
     Vanilla,
+    Fabric,
+    Quilt,
+    Forge,
+    NeoForge,
+    /// Horizon, the Rust reimplementation of the client (not a Java mod loader).
+    Horizon,
+}
+
+impl ModLoader {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Vanilla => "Vanilla",
+            Self::Fabric => "Fabric",
+            Self::Quilt => "Quilt",
+            Self::Forge => "Forge",
+            Self::NeoForge => "NeoForge",
+            Self::Horizon => "Horizon",
+        }
+    }
+
+    /// Loader id used by Modrinth and in `.mrpack` files.
+    pub fn modrinth_id(self) -> Option<&'static str> {
+        match self {
+            Self::Fabric => Some("fabric"),
+            Self::Quilt => Some("quilt"),
+            Self::Forge => Some("forge"),
+            Self::NeoForge => Some("neoforge"),
+            Self::Vanilla | Self::Horizon => None,
+        }
+    }
 }
 
 /// Per-instance overrides of the global settings. `None` means "use global".
@@ -44,6 +74,15 @@ pub struct InstanceConfig {
     pub game_version: String,
     #[serde(default)]
     pub loader: ModLoader,
+    /// Loader version (e.g. Fabric `0.16.9`, Forge `47.2.0`). `None` for vanilla.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader_version: Option<String>,
+    /// Id of the installed loader profile under `versions/`, set once installed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    /// Where this instance came from (e.g. a modpack), for display and updates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack: Option<PackOrigin>,
     pub created: DateTime<Utc>,
     #[serde(default)]
     pub last_played: Option<DateTime<Utc>>,
@@ -55,6 +94,15 @@ pub struct InstanceConfig {
     pub material: Option<String>,
     #[serde(default)]
     pub overrides: InstanceOverrides,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackOrigin {
+    /// `modrinth`, `curseforge` or `file`.
+    pub source: String,
+    pub project_id: Option<String>,
+    pub version_id: Option<String>,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,6 +121,18 @@ impl Instance {
 
     pub fn natives_dir(&self) -> PathBuf {
         self.dir.join("natives")
+    }
+
+    /// The version JSON id to launch: the loader profile once installed, else vanilla.
+    pub fn version_id(&self) -> &str {
+        match self.config.loader {
+            ModLoader::Vanilla | ModLoader::Horizon => &self.config.game_version,
+            _ => self
+                .config
+                .profile_id
+                .as_deref()
+                .unwrap_or(&self.config.game_version),
+        }
     }
 }
 
@@ -137,6 +197,20 @@ impl InstanceManager {
     }
 
     pub fn create(&self, name: &str, game_version: &str) -> Result<Instance> {
+        self.create_with(name, game_version, ModLoader::Vanilla, None)
+    }
+
+    pub fn create_with(
+        &self,
+        name: &str,
+        game_version: &str,
+        loader: ModLoader,
+        loader_version: Option<String>,
+    ) -> Result<Instance> {
+        if loader != ModLoader::Vanilla && loader != ModLoader::Horizon && loader_version.is_none()
+        {
+            return Err(Error::Invalid(format!("pick a {} version", loader.name())));
+        }
         let name = name.trim();
         if name.is_empty() {
             return Err(Error::Invalid("instance name cannot be empty".into()));
@@ -154,7 +228,10 @@ impl InstanceManager {
             config: InstanceConfig {
                 name: name.to_owned(),
                 game_version: game_version.to_owned(),
-                loader: ModLoader::Vanilla,
+                loader,
+                loader_version,
+                profile_id: None,
+                pack: None,
                 created: Utc::now(),
                 last_played: None,
                 playtime_secs: 0,

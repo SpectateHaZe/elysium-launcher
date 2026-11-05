@@ -23,9 +23,9 @@
   role="img"
   aria-label="{material.name} block"
 >
-  <image href={faces.top} width="16.04" height="16.04" transform={top} />
-  <image href={faces.left} width="16.04" height="16.04" transform={left} />
-  <image href={faces.right} width="16.04" height="16.04" transform={right} />
+  <image href={faces.top} width="16.04" height="16.04" transform={top} image-rendering="pixelated" style="image-rendering: pixelated" />
+  <image href={faces.left} width="16.04" height="16.04" transform={left} image-rendering="pixelated" style="image-rendering: pixelated" />
+  <image href={faces.right} width="16.04" height="16.04" transform={right} image-rendering="pixelated" style="image-rendering: pixelated" />
 </svg>
 
 <style>

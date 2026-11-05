@@ -1,5 +1,5 @@
-//! Player accounts. Only offline accounts exist for now; Microsoft accounts will be
-//! added as another [`AccountKind`].
+//! Player accounts: offline names and Microsoft accounts. Tokens for Microsoft accounts
+//! never live here; see [`crate::auth`] and [`crate::secrets`].
 
 use md5::{Digest, Md5};
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,14 @@ use crate::paths::Paths;
 #[serde(rename_all = "lowercase")]
 pub enum AccountKind {
     Offline,
+    Microsoft,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Skin {
+    pub url: String,
+    /// `classic` or `slim`.
+    pub variant: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,6 +28,11 @@ pub struct Account {
     pub uuid: Uuid,
     pub username: String,
     pub kind: AccountKind,
+    /// Whether the account owns Minecraft: Java Edition (Microsoft accounts only).
+    #[serde(default)]
+    pub owns_game: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skin: Option<Skin>,
 }
 
 impl Account {
@@ -30,20 +43,45 @@ impl Account {
             uuid: offline_uuid(username),
             username: username.to_owned(),
             kind: AccountKind::Offline,
+            owns_game: false,
+            skin: None,
         })
     }
+}
 
-    /// Access token passed to the game. Offline sessions use a placeholder.
-    pub fn access_token(&self) -> &str {
-        match self.kind {
-            AccountKind::Offline => "0",
-        }
+/// Everything the game needs to know about the player for one launch.
+#[derive(Clone, PartialEq, Eq)]
+pub struct LaunchSession {
+    pub username: String,
+    pub uuid: Uuid,
+    pub access_token: String,
+    /// `msa` for Microsoft accounts, `legacy` for offline ones.
+    pub user_type: &'static str,
+    pub xuid: String,
+    pub online: bool,
+}
+
+impl std::fmt::Debug for LaunchSession {
+    // Never print the token.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LaunchSession")
+            .field("username", &self.username)
+            .field("uuid", &self.uuid)
+            .field("user_type", &self.user_type)
+            .field("online", &self.online)
+            .finish_non_exhaustive()
     }
+}
 
-    /// `${user_type}` launch argument.
-    pub fn user_type(&self) -> &'static str {
-        match self.kind {
-            AccountKind::Offline => "legacy",
+impl LaunchSession {
+    pub fn offline(account: &Account) -> Self {
+        Self {
+            username: account.username.clone(),
+            uuid: account.uuid,
+            access_token: "0".to_owned(),
+            user_type: "legacy",
+            xuid: "0".to_owned(),
+            online: false,
         }
     }
 }

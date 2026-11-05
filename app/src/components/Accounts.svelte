@@ -1,6 +1,24 @@
 <script lang="ts">
   import { app } from "../lib/store.svelte";
   import { api, errorText } from "../lib/api";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import SkinFace from "./SkinFace.svelte";
+
+  let skinBusy = $state(false);
+
+  async function changeSkin(slim: boolean) {
+    const path = await openDialog({ title: "Choose a skin", multiple: false, filters: [{ name: "Skin", extensions: ["png"] }] });
+    if (typeof path !== "string") return;
+    skinBusy = true;
+    try {
+      app.accounts = await api.uploadSkin(path, slim);
+      app.toast("Skin updated");
+    } catch (err) {
+      app.toast(errorText(err));
+    } finally {
+      skinBusy = false;
+    }
+  }
 
   let username = $state("");
   let error = $state<string | null>(null);
@@ -46,11 +64,16 @@
       {#each app.accounts.accounts as a (a.uuid)}
         {@const active = a.uuid === app.accounts.active}
         <li class:active>
-          <span class="avatar" aria-hidden="true">{a.username.slice(0, 1).toUpperCase()}</span>
+          <SkinFace url={a.skin?.url} name={a.username} size={48} />
           <div class="who">
             <p class="title-m">{a.username}</p>
-            <p class="body-m muted">{active ? "Playing as this account" : "Offline account"}</p>
+            <p class="body-m muted">
+              {a.kind === "microsoft" ? (a.owns_game ? "Microsoft account" : "Microsoft account without Java Edition") : "Offline account"}{active ? ", playing as this account" : ""}
+            </p>
           </div>
+          {#if active && a.kind === "microsoft"}
+            <button class="btn text state" disabled={skinBusy} onclick={() => changeSkin(a.skin?.variant === "slim")}>Change skin</button>
+          {/if}
           {#if !active}
             <button class="btn tonal state" onclick={() => use(a.uuid)}>Play as {a.username}</button>
           {/if}
@@ -61,6 +84,17 @@
       {/each}
     </ul>
   {/if}
+
+  <section class="ms">
+    <h2 class="title-l">Microsoft account</h2>
+    <div class="group ms-row">
+      <div class="who">
+        <p class="title-m">Play online, with your skin</p>
+        <p class="body-m muted">Needed for multiplayer servers, skins, and Horizon.</p>
+      </div>
+      <button class="btn filled state" onclick={() => (app.dialog = "msa")}><span class="icon">login</span>Sign in with Microsoft</button>
+    </div>
+  </section>
 
   <form class="add" onsubmit={add}>
     <h2 class="title-l">Add an offline account</h2>
@@ -76,10 +110,7 @@
     </div>
   </form>
 
-  <div class="note">
-    <span class="icon">info</span>
-    <p class="body-m">Signing in with a Microsoft account, for skins and online servers, is coming in a later update.</p>
-  </div>
+
 </div>
 </div>
 
@@ -91,26 +122,14 @@
   .list { list-style: none; margin: 0 0 40px; padding: 4px 16px; }
   li { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--separator); }
   li:first-child { border-top: 0; }
-  .avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    font-size: 20px;
-    font-weight: 800;
-    background: var(--fill);
-    color: var(--label);
-  }
-  li.active .avatar { background: var(--accent); color: var(--on-accent); }
   .who { flex: 1; min-width: 0; }
   .who .muted { font-size: 13px; }
   li.active .who .muted { color: var(--accent); font-weight: 600; }
-  .add h2 { margin: 0 0 12px 4px; }
+  .add h2, .ms h2 { margin: 0 0 12px 4px; }
+  .ms { margin-bottom: 36px; }
+  .ms-row { display: flex; align-items: center; gap: 16px; padding: 18px 20px; }
   .form-group { padding: 20px; }
   .inline { display: flex; gap: 12px; align-items: flex-start; }
   .inline .field { flex: 1; max-width: 360px; }
   .inline .btn { height: 56px; padding: 0 24px; }
-  .note { display: flex; gap: 10px; align-items: flex-start; margin: 32px 0 0 4px; color: var(--label-2); max-width: 60ch; }
-  .note .icon { font-size: 20px; }
 </style>

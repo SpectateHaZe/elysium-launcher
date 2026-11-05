@@ -12,8 +12,12 @@ use crate::rules::{Environment, Rule, is_allowed};
 #[serde(rename_all = "camelCase")]
 pub struct VersionJson {
     pub id: String,
-    #[serde(rename = "type")]
+    /// Loader profiles (Fabric, Forge, …) build on a vanilla version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inherits_from: Option<String>,
+    #[serde(rename = "type", default = "default_kind")]
     pub kind: VersionType,
+    #[serde(default)]
     pub main_class: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub arguments: Option<Arguments>,
@@ -33,6 +37,13 @@ pub struct VersionJson {
     pub logging: Option<Logging>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_time: Option<DateTime<Utc>>,
+    /// Id of the version whose client jar goes on the classpath (set by [`Self::merge`]).
+    #[serde(skip)]
+    pub jar_id: Option<String>,
+}
+
+fn default_kind() -> VersionType {
+    VersionType::Release
 }
 
 impl VersionJson {
@@ -47,6 +58,58 @@ impl VersionJson {
             .as_ref()
             .and_then(|j| j.component.as_deref())
             .unwrap_or("jre-legacy")
+    }
+
+    /// Combines a loader profile (`self`) with the version it inherits from, the way the
+    /// official launcher does: the child's main class and arguments win, its libraries
+    /// come first and replace the parent's copies of the same artifact.
+    pub fn merge(self, parent: VersionJson) -> VersionJson {
+        let jar_id = if self.downloads.is_some() {
+            Some(self.id.clone())
+        } else {
+            parent.jar_id.clone().or_else(|| Some(parent.id.clone()))
+        };
+        let mut libraries = self.libraries;
+        let keys: std::collections::HashSet<String> =
+            libraries.iter().map(Library::dedupe_key).collect();
+        libraries.extend(
+            parent
+                .libraries
+                .into_iter()
+                .filter(|l| !keys.contains(&l.dedupe_key())),
+        );
+        let arguments = match (self.arguments, parent.arguments) {
+            (Some(c), Some(p)) => Some(Arguments {
+                game: p.game.into_iter().chain(c.game).collect(),
+                jvm: p.jvm.into_iter().chain(c.jvm).collect(),
+            }),
+            (c, p) => c.or(p),
+        };
+        VersionJson {
+            id: self.id,
+            inherits_from: None,
+            kind: parent.kind,
+            main_class: if self.main_class.is_empty() {
+                parent.main_class
+            } else {
+                self.main_class
+            },
+            arguments,
+            minecraft_arguments: self.minecraft_arguments.or(parent.minecraft_arguments),
+            asset_index: self.asset_index.or(parent.asset_index),
+            assets: self.assets.or(parent.assets),
+            downloads: self.downloads.or(parent.downloads),
+            java_version: self.java_version.or(parent.java_version),
+            libraries,
+            logging: self.logging.or(parent.logging),
+            release_time: parent.release_time,
+            jar_id,
+        }
+    }
+
+    /// Id of the version providing the client jar.
+    pub fn jar_version(&self) -> &str {
+        self.jar_id.as_deref().unwrap_or(&self.id)
     }
 
     /// Asset index id (`assets` field, falling back to the index reference).
@@ -171,6 +234,16 @@ pub struct Library {
     pub extract: Option<Extract>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rules: Option<Vec<Rule>>,
+    /// Maven repository base for libraries without `downloads` (Fabric, Quilt, old Forge).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha1: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    /// Old Forge profiles mark libraries the client needs; `false` means server only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clientreq: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -189,14 +262,47 @@ pub struct Extract {
 
 impl Library {
     pub fn is_allowed(&self, env: &Environment) -> bool {
-        self.rules.as_deref().is_none_or(|r| is_allowed(r, env))
+        self.clientreq != Some(false) && self.rules.as_deref().is_none_or(|r| is_allowed(r, env))
+    }
+
+    /// `group:artifact[:classifier]`, used to let a loader's library replace vanilla's.
+    pub fn dedupe_key(&self) -> String {
+        let mut parts = self.name.split('@').next().unwrap_or_default().split(':');
+        let (g, a) = (
+            parts.next().unwrap_or_default(),
+            parts.next().unwrap_or_default(),
+        );
+        let classifier = parts.nth(1).unwrap_or_default();
+        format!("{g}:{a}:{classifier}")
     }
 
     /// The main jar that goes on the classpath, with its path relative to `libraries/`.
-    pub fn artifact(&self) -> Option<(String, &Artifact)> {
-        let artifact = self.downloads.as_ref()?.artifact.as_ref()?;
-        let path = artifact.path.clone().or_else(|| maven_path(&self.name))?;
-        Some((path, artifact))
+    /// Libraries without a `downloads` block are resolved against their Maven repository.
+    pub fn artifact(&self) -> Option<(String, Artifact)> {
+        if let Some(downloads) = &self.downloads {
+            let artifact = downloads.artifact.as_ref()?;
+            let path = artifact.path.clone().or_else(|| maven_path(&self.name))?;
+            return Some((path, artifact.clone()));
+        }
+        if self.natives.is_some() {
+            return None;
+        }
+        let path = maven_path(&self.name)?;
+        let base = self
+            .url
+            .as_deref()
+            .filter(|u| !u.is_empty())
+            .unwrap_or(MOJANG_LIBRARIES);
+        let url = format!("{}/{path}", base.trim_end_matches('/'));
+        Some((
+            path.clone(),
+            Artifact {
+                path: Some(path),
+                sha1: self.sha1.clone(),
+                size: self.size,
+                url,
+            },
+        ))
     }
 
     /// Legacy native jar for `env` (to be extracted, not put on the classpath).
@@ -219,6 +325,9 @@ impl Library {
         Some((path, artifact))
     }
 }
+
+/// Default Maven repository for libraries that name none.
+pub const MOJANG_LIBRARIES: &str = "https://libraries.minecraft.net/";
 
 /// Converts a Maven coordinate (`group:artifact:version[:classifier][@ext]`) into a
 /// repository-relative path.
@@ -258,6 +367,57 @@ mod tests {
             Some("a/b/c/1.0/c-1.0.zip")
         );
         assert_eq!(maven_path("bad"), None);
+    }
+
+    #[test]
+    fn maven_libraries_and_merge() {
+        let child: VersionJson = serde_json::from_str(
+            r#"{"id":"fabric-loader-0.16.9-1.21","inheritsFrom":"1.21","mainClass":"net.fabricmc.loader.impl.launch.knot.KnotClient",
+                "arguments":{"game":[],"jvm":["-DFabricMcEmu= net.minecraft.client.main.Main "]},
+                "libraries":[{"name":"org.ow2.asm:asm:9.7","url":"https://maven.fabricmc.net/","sha1":"abc","size":5},
+                             {"name":"net.fabricmc:fabric-loader:0.16.9","url":"https://maven.fabricmc.net/"}]}"#,
+        )
+        .unwrap();
+        let parent: VersionJson = serde_json::from_str(
+            r#"{"id":"1.21","type":"release","mainClass":"net.minecraft.client.main.Main",
+                "arguments":{"game":["--username","${auth_player_name}"],"jvm":["-cp","${classpath}"]},
+                "downloads":{"client":{"url":"c","sha1":"s","size":1}},
+                "libraries":[{"name":"org.ow2.asm:asm:9.3","downloads":{"artifact":{"path":"old.jar","url":"u"}}},
+                             {"name":"com.mojang:brigadier:1.0"}]}"#,
+        )
+        .unwrap();
+        let merged = child.merge(parent);
+        assert_eq!(
+            merged.main_class,
+            "net.fabricmc.loader.impl.launch.knot.KnotClient"
+        );
+        assert_eq!(merged.jar_version(), "1.21");
+        let names: Vec<_> = merged.libraries.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "org.ow2.asm:asm:9.7",
+                "net.fabricmc:fabric-loader:0.16.9",
+                "com.mojang:brigadier:1.0"
+            ]
+        );
+        assert_eq!(
+            merged.arguments.unwrap().jvm.len(),
+            3,
+            "parent jvm args first, then the loader's"
+        );
+        let (path, art) = merged.libraries[0].artifact().unwrap();
+        assert_eq!(path, "org/ow2/asm/asm/9.7/asm-9.7.jar");
+        assert_eq!(
+            art.url,
+            "https://maven.fabricmc.net/org/ow2/asm/asm/9.7/asm-9.7.jar"
+        );
+        assert_eq!(art.sha1.as_deref(), Some("abc"));
+        let (_, mojang) = merged.libraries[2].artifact().unwrap();
+        assert_eq!(
+            mojang.url,
+            "https://libraries.minecraft.net/com/mojang/brigadier/1.0/brigadier-1.0.jar"
+        );
     }
 
     #[test]

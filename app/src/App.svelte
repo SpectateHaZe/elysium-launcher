@@ -12,6 +12,11 @@
   import NewInstanceDialog from "./components/NewInstanceDialog.svelte";
   import ConfirmDialog from "./components/ConfirmDialog.svelte";
   import Snackbar from "./components/Snackbar.svelte";
+  import Discover from "./components/Discover.svelte";
+  import Content from "./components/Content.svelte";
+  import JobsTray from "./components/JobsTray.svelte";
+  import ManualDownloads from "./components/ManualDownloads.svelte";
+  import MsaDialog from "./components/MsaDialog.svelte";
 
   void app.init();
 
@@ -42,6 +47,10 @@
         <Home />
       {:else if app.route.name === "logs"}
         <Logs id={app.route.id} />
+      {:else if app.route.name === "content"}
+        <Content id={app.route.id} />
+      {:else if app.route.name === "discover"}
+        <Discover />
       {:else if app.route.name === "accounts"}
         <Accounts />
       {:else if app.route.name === "settings"}
@@ -55,6 +64,8 @@
   {/if}
   {#if app.dialog === "new-instance"}
     <NewInstanceDialog />
+  {:else if app.dialog === "msa"}
+    <MsaDialog />
   {:else if app.dialog === "quit"}
     <ConfirmDialog
       title="Quit while Minecraft is running?"
@@ -76,6 +87,10 @@
       oncancel={() => (app.dialog = null)}
     />
   {/if}
+  {#if app.manual}
+    <ManualDownloads />
+  {/if}
+  <JobsTray />
   <Snackbar />
 {/if}
 
