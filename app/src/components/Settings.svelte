@@ -1,16 +1,12 @@
 <script lang="ts">
   import { app } from "../lib/store.svelte";
-  import { api, type Settings, type ThemePref } from "../lib/api";
+  import { api, type Settings } from "../lib/api";
   import MemoryFields from "./MemoryFields.svelte";
   import JavaField from "./JavaField.svelte";
   import Row from "./Row.svelte";
+  import AppearanceSettings from "./AppearanceSettings.svelte";
 
   const s = $derived(app.settings!);
-  const themes: { value: ThemePref; label: string; icon: string }[] = [
-    { value: "system", label: "System", icon: "contrast" },
-    { value: "light", label: "Light", icon: "light_mode" },
-    { value: "dark", label: "Dark", icon: "dark_mode" },
-  ];
 
   function set(patch: Partial<Settings>) {
     void app.saveSettings({ ...s, ...patch });
@@ -24,15 +20,7 @@
   <section>
     <h2 class="title-l">Appearance</h2>
     <div class="group">
-    <Row title="Theme">
-      <div class="segmented" role="group" aria-label="Theme">
-        {#each themes as t (t.value)}
-          <button class="state" aria-pressed={s.theme === t.value} onclick={() => set({ theme: t.value })}>
-            <span class="icon">{s.theme === t.value ? "check" : t.icon}</span>{t.label}
-          </button>
-        {/each}
-      </div>
-    </Row>
+      <AppearanceSettings />
     </div>
   </section>
 

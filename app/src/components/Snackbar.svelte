@@ -38,7 +38,7 @@
     box-shadow: var(--shadow-float);
     animation: in 250ms var(--ease-out);
   }
-  .btn { color: var(--md-inverse-primary); }
+  .btn { color: var(--accent); }
   .snackbar :global(.body-m) { font-weight: 600; }
   @keyframes in { from { opacity: 0; transform: translate(-50%, 12px); } }
 </style>

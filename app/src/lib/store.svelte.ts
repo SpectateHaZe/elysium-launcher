@@ -162,10 +162,15 @@ class AppState {
     }
   }
 
+  #saveSeq = 0;
+
   async saveSettings(next: Settings) {
     this.settings = next;
+    const seq = ++this.#saveSeq;
     try {
-      await api.saveSettings(next);
+      const saved = await api.saveSettings(next);
+      // Ignore responses that a newer change has already superseded.
+      if (seq === this.#saveSeq) this.settings = saved;
     } catch (e) {
       this.toast(`Couldn't save settings: ${errorText(e)}`);
     }

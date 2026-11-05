@@ -1,14 +1,13 @@
 <script lang="ts">
-  import { MATERIALS, tint } from "../lib/theme";
+  import { MATERIALS, tileColor } from "../lib/theme";
   import { theme } from "../lib/dark.svelte";
   import Block from "./Block.svelte";
 
   let { value, onchange }: { value: string | null; onchange: (id: string) => void } = $props();
 </script>
 
-<div class="picker" role="radiogroup" aria-label="Color">
+<div class="picker" role="radiogroup" aria-label="Block">
   {#each MATERIALS as m (m.id)}
-    {@const t = tint(m, theme.dark)}
     {@const selected = value === m.id}
     <button
       class="swatch state"
@@ -17,8 +16,7 @@
       aria-checked={selected}
       aria-label={m.name}
       title={m.name}
-      style:background={t.container}
-      style:color={t.onContainer}
+      style:background={tileColor(m, theme.dark)}
       onclick={() => onchange(m.id)}
     >
       <Block material={m} key="swatch" size={30} />

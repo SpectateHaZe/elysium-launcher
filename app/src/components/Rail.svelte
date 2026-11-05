@@ -11,7 +11,7 @@
   ] as const;
 
   const current = $derived(app.route.name === "logs" ? "home" : app.route.name);
-  const mark = $derived(materialFor(app.selected?.material, app.selected?.name));
+  const mark = materialFor("amethyst");
 </script>
 
 <nav class="rail" aria-label="Main">
@@ -87,7 +87,7 @@
   .dest.active { color: var(--label); }
   .dest.active .indicator { background: var(--label); color: var(--bg); }
   .dest:focus-visible { outline: none; }
-  .dest:focus-visible .indicator { outline: 3px solid var(--md-primary); outline-offset: 2px; }
+  .dest:focus-visible .indicator { outline: 3px solid var(--accent); outline-offset: 2px; }
   .label { font-size: 11px; line-height: 14px; font-weight: 650; }
   .dest.active .label { font-weight: 750; }
   .spacer { flex: 1; }
@@ -97,8 +97,8 @@
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: var(--md-primary);
-    color: var(--md-on-primary);
+    background: var(--accent);
+    color: var(--on-accent);
     font: inherit;
     font-size: 19px;
     font-weight: 800;

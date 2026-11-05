@@ -1,73 +1,53 @@
 /* ---------------------------------------------------------------------------
-   Tokens. Colour roles (--md-*) are written at runtime by lib/theme.ts from the
-   focused instance's material. Registering the main ones lets them interpolate,
-   so switching instances re-tints the whole launcher smoothly.
+   Tokens. Colours are written at runtime by lib/theme.ts from the chosen palette
+   and accent. Registering them lets them interpolate, so theme changes cross-fade.
    ------------------------------------------------------------------------- */
-@property --md-primary { syntax: "<color>"; inherits: true; initial-value: #6750a4; }
-@property --md-on-primary { syntax: "<color>"; inherits: true; initial-value: #fff; }
-@property --md-primary-container { syntax: "<color>"; inherits: true; initial-value: #eaddff; }
-@property --md-on-primary-container { syntax: "<color>"; inherits: true; initial-value: #21005d; }
-@property --md-secondary-container { syntax: "<color>"; inherits: true; initial-value: #e8def8; }
-@property --md-on-secondary-container { syntax: "<color>"; inherits: true; initial-value: #1d192b; }
-@property --md-surface { syntax: "<color>"; inherits: true; initial-value: #fef7ff; }
-@property --md-surface-container-low { syntax: "<color>"; inherits: true; initial-value: #f7f2fa; }
-@property --md-surface-container { syntax: "<color>"; inherits: true; initial-value: #f3edf7; }
-@property --md-surface-container-high { syntax: "<color>"; inherits: true; initial-value: #ece6f0; }
-@property --md-surface-container-highest { syntax: "<color>"; inherits: true; initial-value: #e6e0e9; }
-@property --md-on-surface { syntax: "<color>"; inherits: true; initial-value: #1d1b20; }
-@property --md-on-surface-variant { syntax: "<color>"; inherits: true; initial-value: #49454f; }
-@property --md-outline-variant { syntax: "<color>"; inherits: true; initial-value: #cac4d0; }
+@property --bg { syntax: "<color>"; inherits: true; initial-value: #f5f5f7; }
+@property --card { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
+@property --fill { syntax: "<color>"; inherits: true; initial-value: #e8e8ed; }
+@property --fill-strong { syntax: "<color>"; inherits: true; initial-value: #d2d2d7; }
+@property --label { syntax: "<color>"; inherits: true; initial-value: #1d1d1f; }
+@property --label-2 { syntax: "<color>"; inherits: true; initial-value: #6e6e73; }
+@property --label-3 { syntax: "<color>"; inherits: true; initial-value: #86868b; }
+@property --accent { syntax: "<color>"; inherits: true; initial-value: #007aff; }
+@property --accent-soft { syntax: "<color>"; inherits: true; initial-value: #e5f0ff; }
+@property --on-accent { syntax: "<color>"; inherits: true; initial-value: #ffffff; }
 
 :root {
-  /* Apple-style neutrals. The instance colour is reserved for accents. */
-  --bg: #f5f5f7;
-  --card: #ffffff;
-  --fill: #e8e8ed;
-  --fill-strong: #d2d2d7;
-  --label: #1d1d1f;
-  --label-2: #6e6e73;
-  --label-3: #86868b;
-  --separator: rgb(0 0 0 / 0.08);
-  --chrome: rgb(245 245 247 / 0.72);
+  /* Colour tokens (--bg, --card, --accent, …) are set at runtime by lib/theme.ts. */
   --shadow-card: 0 2px 10px rgb(0 0 0 / 0.04);
   --shadow-float: 0 24px 64px rgb(0 0 0 / 0.18), 0 2px 8px rgb(0 0 0 / 0.06);
-  --glow: var(--md-primary-container);
 
-  --font: "Roboto Flex Variable", system-ui, sans-serif;
+  /* SF Pro where the OS has it (macOS), Inter (its closest open relative) elsewhere. */
+  --font: "Inter Variable", "Segoe UI", system-ui, sans-serif;
   --mono: "Cascadia Mono", "Consolas", ui-monospace, "SF Mono", "DejaVu Sans Mono", monospace;
 
-  /* Motion: Material 3 emphasized easing. */
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --ease-out: cubic-bezier(0.05, 0.7, 0.1, 1);
-  --ease-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  /* Motion: the curve iOS uses for sheets and navigation. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
   --theme-shift: 600ms;
 
-  /* Shape scale: each size has a job; nothing gets one radius "everywhere". */
-  --shape-xs: 4px;   /* snackbars, text fields */
-  --shape-s: 8px;    /* chips, menus */
-  --shape-m: 12px;   /* list highlights */
-  --shape-l: 16px;   /* selected tiles */
-  --shape-xl: 28px;  /* hero, dialogs, tiles */
+  /* Corner radii: larger containers get larger, softer corners. */
+  --shape-s: 8px;
+  --shape-m: 12px;
+  --shape-l: 16px;
+  --shape-xl: 28px;
   --shape-full: 999px;
 }
 
-/* Only animate re-tints after the first scheme is in place (see App.svelte). */
+/* Only animate colour changes after the first theme is applied (see App.svelte). */
 :root.theme-ready {
   transition:
-    --md-primary var(--theme-shift) var(--ease),
-    --md-on-primary var(--theme-shift) var(--ease),
-    --md-primary-container var(--theme-shift) var(--ease),
-    --md-on-primary-container var(--theme-shift) var(--ease),
-    --md-secondary-container var(--theme-shift) var(--ease),
-    --md-on-secondary-container var(--theme-shift) var(--ease),
-    --md-surface var(--theme-shift) var(--ease),
-    --md-surface-container-low var(--theme-shift) var(--ease),
-    --md-surface-container var(--theme-shift) var(--ease),
-    --md-surface-container-high var(--theme-shift) var(--ease),
-    --md-surface-container-highest var(--theme-shift) var(--ease),
-    --md-on-surface var(--theme-shift) var(--ease),
-    --md-on-surface-variant var(--theme-shift) var(--ease),
-    --md-outline-variant var(--theme-shift) var(--ease);
+    --bg var(--theme-shift) var(--ease),
+    --card var(--theme-shift) var(--ease),
+    --fill var(--theme-shift) var(--ease),
+    --fill-strong var(--theme-shift) var(--ease),
+    --label var(--theme-shift) var(--ease),
+    --label-2 var(--theme-shift) var(--ease),
+    --label-3 var(--theme-shift) var(--ease),
+    --accent var(--theme-shift) var(--ease),
+    --accent-soft var(--theme-shift) var(--ease),
+    --on-accent var(--theme-shift) var(--ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -79,19 +59,10 @@
   }
 }
 
+/* Neutral tokens come from the palette; only depth differs here. */
 :root[data-theme="dark"] {
-  --bg: #000000;
-  --card: #1c1c1e;
-  --fill: #2c2c2e;
-  --fill-strong: #3a3a3c;
-  --label: #f5f5f7;
-  --label-2: #a1a1a6;
-  --label-3: #6e6e73;
-  --separator: rgb(255 255 255 / 0.12);
-  --chrome: rgb(22 22 23 / 0.72);
   --shadow-card: none;
   --shadow-float: 0 24px 64px rgb(0 0 0 / 0.6);
-  --glow: color-mix(in srgb, var(--md-primary) 32%, transparent);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -115,17 +86,16 @@ html, body {
 
 /* Type scale: heavy, tight display type in the manner of Apple's product pages. */
 .display {
-  font-size: clamp(56px, 7.4vw, 104px);
-  line-height: 0.94;
-  font-weight: 760;
-  font-stretch: 100%;
-  letter-spacing: -0.042em;
+  font-size: clamp(56px, 7.2vw, 100px);
+  line-height: 0.98;
+  font-weight: 700;
+  letter-spacing: -0.035em;
   margin: 0;
   text-wrap: balance;
 }
-.headline { font-size: 48px; line-height: 1.04; font-weight: 740; letter-spacing: -0.035em; margin: 0; }
-.title-l { font-size: 26px; line-height: 32px; font-weight: 760; letter-spacing: -0.025em; margin: 0; }
-.title-m { font-size: 17px; line-height: 22px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+.headline { font-size: 48px; line-height: 1.06; font-weight: 700; letter-spacing: -0.03em; margin: 0; }
+.title-l { font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.022em; margin: 0; }
+.title-m { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.012em; margin: 0; }
 .subhead { font-size: 21px; line-height: 28px; font-weight: 500; letter-spacing: -0.012em; margin: 0; text-wrap: pretty; }
 .body-l { font-size: 17px; line-height: 25px; margin: 0; letter-spacing: -0.008em; }
 .body-m { font-size: 15px; line-height: 21px; margin: 0; }
@@ -149,7 +119,7 @@ html, body {
 }
 .icon.filled { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24; }
 
-:focus-visible { outline: 3px solid color-mix(in srgb, var(--md-primary) 70%, transparent); outline-offset: 2px; }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 2px; }
 
 /* Hover feedback for custom controls. */
 .state { transition: filter 150ms linear, transform 150ms var(--ease), background-color 150ms linear; }
@@ -177,12 +147,12 @@ html, body {
   gap: 6px;
   cursor: pointer;
   white-space: nowrap;
-  color: var(--md-primary);
+  color: var(--accent);
   background: transparent;
 }
 .btn .icon { font-size: 20px; margin-left: -4px; }
 .btn:disabled { cursor: default; opacity: 0.4; filter: none; transform: none; }
-.btn.filled { background: var(--md-primary); color: var(--md-on-primary); }
+.btn.filled { background: var(--accent); color: var(--on-accent); }
 .btn.tonal { background: var(--fill); color: var(--label); }
 .btn.outlined { background: var(--fill); color: var(--label); }
 .btn.text { padding: 0 12px; }
@@ -228,7 +198,7 @@ html, body {
   user-select: text;
   transition: box-shadow 150ms linear;
 }
-.field input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-primary) 55%, transparent); }
+.field input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent); }
 .field.invalid input { box-shadow: 0 0 0 2px #ff3b30; }
 .field .float {
   position: absolute;
@@ -268,7 +238,7 @@ html, body {
   user-select: text;
 }
 .search input::placeholder { color: var(--label-3); }
-.search:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-primary) 55%, transparent); }
+.search:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent); }
 
 /* ---------------------------------------------------------------------------
    iOS-style switch, tinted with the instance colour.
@@ -297,7 +267,7 @@ html, body {
   box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
   transition: left 250ms var(--ease), width 200ms var(--ease);
 }
-.switch:checked { background: var(--md-primary); }
+.switch:checked { background: var(--accent); }
 .switch:checked::after { left: 22px; }
 .switch:active::after { width: 33px; }
 .switch:checked:active::after { left: 16px; }
@@ -317,7 +287,7 @@ html, body {
 .slider::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: var(--shape-full);
-  background: linear-gradient(to right, var(--md-primary) 0 var(--pct), var(--fill-strong) var(--pct));
+  background: linear-gradient(to right, var(--accent) 0 var(--pct), var(--fill-strong) var(--pct));
 }
 .slider::-webkit-slider-thumb {
   appearance: none;
@@ -329,7 +299,7 @@ html, body {
   box-shadow: 0 3px 8px rgb(0 0 0 / 0.18), 0 0 0 0.5px rgb(0 0 0 / 0.08);
 }
 .slider:focus-visible { outline: none; }
-.slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--md-primary) 55%, transparent); }
+.slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent); }
 
 /* ---------------------------------------------------------------------------
    Filter pills and segmented control.
@@ -388,3 +358,6 @@ html, body {
 ::-webkit-scrollbar-corner { background: transparent; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+:root[data-reduce-transparency="true"] * { backdrop-filter: none !important; }
+:root[data-platform="macos"] { --font: -apple-system, BlinkMacSystemFont, "Inter Variable", sans-serif; }

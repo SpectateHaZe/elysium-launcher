@@ -15,6 +15,16 @@ export interface Overrides {
 }
 
 export type ThemePref = "system" | "light" | "dark";
+export type TextSize = "small" | "default" | "large";
+
+export interface Appearance {
+  palette: string;
+  accent: string;
+  custom_accent: string;
+  custom_tint: string;
+  text_size: TextSize;
+  reduce_transparency: boolean;
+}
 
 export interface Settings {
   java_path: string | null;
@@ -24,6 +34,7 @@ export interface Settings {
   resolution: Resolution | null;
   concurrent_downloads: number;
   theme: ThemePref;
+  appearance: Appearance;
   hide_on_launch: boolean;
 }
 
@@ -108,7 +119,7 @@ export const api = {
   updateInstance: (id: string, name: string, material: string | null, overrides: Overrides) =>
     invoke<Instance>("update_instance", { id, name, material, overrides }),
   deleteInstance: (id: string) => invoke<void>("delete_instance", { id }),
-  saveSettings: (settings: Settings) => invoke<void>("save_settings", { settings }),
+  saveSettings: (settings: Settings) => invoke<Settings>("save_settings", { settings }),
   addOfflineAccount: (username: string) => invoke<AccountStore>("add_offline_account", { username }),
   removeAccount: (uuid: string) => invoke<AccountStore>("remove_account", { uuid }),
   setActiveAccount: (uuid: string) => invoke<AccountStore>("set_active_account", { uuid }),

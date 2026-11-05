@@ -24,6 +24,71 @@ pub enum Theme {
     Dark,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextSize {
+    Small,
+    #[default]
+    Default,
+    Large,
+}
+
+/// Look-and-feel choices. Palette and accent ids are interpreted by the UI; unknown ids
+/// fall back to the defaults there, so old settings files keep working.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Appearance {
+    /// Theme palette id (`default`, `graphite`, `midnight`, … or `custom`).
+    pub palette: String,
+    /// Accent id: `palette` (the theme's own), an Apple system colour id, or `custom`.
+    pub accent: String,
+    /// `#rrggbb` used when `accent` is `custom`.
+    pub custom_accent: String,
+    /// `#rrggbb` the custom palette is derived from.
+    pub custom_tint: String,
+    pub text_size: TextSize,
+    pub reduce_transparency: bool,
+}
+
+impl Default for Appearance {
+    fn default() -> Self {
+        Self {
+            palette: "default".into(),
+            accent: "palette".into(),
+            custom_accent: "#007aff".into(),
+            custom_tint: "#5e5ce6".into(),
+            text_size: TextSize::Default,
+            reduce_transparency: false,
+        }
+    }
+}
+
+impl Appearance {
+    /// Replaces malformed colours with defaults so the UI never receives junk.
+    pub fn sanitize(&mut self) {
+        let defaults = Self::default();
+        if !is_hex_color(&self.custom_accent) {
+            self.custom_accent = defaults.custom_accent;
+        }
+        if !is_hex_color(&self.custom_tint) {
+            self.custom_tint = defaults.custom_tint;
+        }
+        self.custom_accent.make_ascii_lowercase();
+        self.custom_tint.make_ascii_lowercase();
+        if self.palette.is_empty() {
+            self.palette = defaults.palette;
+        }
+        if self.accent.is_empty() {
+            self.accent = defaults.accent;
+        }
+    }
+}
+
+/// `#rrggbb`.
+pub fn is_hex_color(s: &str) -> bool {
+    s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -34,7 +99,9 @@ pub struct Settings {
     pub jvm_args: String,
     pub resolution: Option<Resolution>,
     pub concurrent_downloads: usize,
+    /// Light/dark mode.
     pub theme: Theme,
+    pub appearance: Appearance,
     /// Close the launcher window while the game is running.
     pub hide_on_launch: bool,
 }
@@ -49,6 +116,7 @@ impl Default for Settings {
             resolution: None,
             concurrent_downloads: 16,
             theme: Theme::System,
+            appearance: Appearance::default(),
             hide_on_launch: false,
         }
     }
@@ -56,7 +124,9 @@ impl Default for Settings {
 
 impl Settings {
     pub fn load(paths: &Paths) -> Result<Self> {
-        Ok(fsutil::read_json(&paths.settings_file())?.unwrap_or_default())
+        let mut settings: Self = fsutil::read_json(&paths.settings_file())?.unwrap_or_default();
+        settings.appearance.sanitize();
+        Ok(settings)
     }
 
     pub fn save(&self, paths: &Paths) -> Result<()> {
@@ -130,6 +200,27 @@ mod tests {
             vec!["-XX:+UseG1GC", r"-Dpath=C:\My Folder", "-Da=", ""]
         );
         assert!(split_args("   ").is_empty());
+    }
+
+    #[test]
+    fn appearance_defaults_and_sanitizing() {
+        // Files written before appearance settings existed still load.
+        let old: Settings = serde_json::from_str(r#"{"theme":"dark"}"#).unwrap();
+        assert_eq!(old.appearance, Appearance::default());
+
+        let mut a = Appearance {
+            custom_accent: "red".into(),
+            custom_tint: "#ABCDEF".into(),
+            palette: String::new(),
+            ..Default::default()
+        };
+        a.sanitize();
+        assert_eq!(a.custom_accent, "#007aff");
+        assert_eq!(a.custom_tint, "#abcdef");
+        assert_eq!(a.palette, "default");
+        assert!(is_hex_color("#00ff7A"));
+        assert!(!is_hex_color("#00ff7"));
+        assert!(!is_hex_color("00ff7a0"));
     }
 
     #[test]

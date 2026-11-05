@@ -113,7 +113,7 @@
   </div>
 
   <div>
-    <h3 class="title-m">Color</h3>
+    <h3 class="title-m">Block</h3>
     <div class="picker"><MaterialPicker value={material} onchange={(m) => (material = m)} /></div>
   </div>
 
@@ -167,23 +167,23 @@
     align-items: center;
     gap: 12px;
     background: none;
-    color: var(--md-on-surface);
+    color: var(--label);
     font: inherit;
     text-align: left;
     cursor: pointer;
   }
   .option:hover { background: var(--fill); }
-  .option[aria-selected="true"] { background: color-mix(in srgb, var(--md-primary) 16%, transparent); }
+  .option[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 16%, transparent); }
   .radio { font-size: 22px; color: var(--label-3); }
-  .option[aria-selected="true"] .radio { color: var(--md-primary); }
+  .option[aria-selected="true"] .radio { color: var(--accent); }
   .id { flex: 1; }
   .badge {
     font-size: 12px;
     font-weight: 700;
     padding: 2px 8px;
     border-radius: var(--shape-full);
-    background: var(--md-primary);
-    color: var(--md-on-primary);
+    background: var(--accent);
+    color: var(--on-accent);
   }
   .when { font-variant-numeric: tabular-nums; }
   .empty { height: 100%; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; padding: 0 24px; }

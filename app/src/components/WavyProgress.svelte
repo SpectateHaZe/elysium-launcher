@@ -50,13 +50,13 @@
   svg { display: block; overflow: visible; }
   .wave {
     fill: none;
-    stroke: var(--md-primary);
+    stroke: var(--accent);
     stroke-width: 4;
     stroke-linecap: round;
     animation: travel 1s linear infinite;
   }
   .track { stroke: var(--fill-strong); stroke-width: 4; stroke-linecap: round; }
-  .stop { fill: var(--md-primary); }
+  .stop { fill: var(--accent); }
   .clip { transition: width 300ms var(--ease); }
   .indeterminate .clip { animation: sweep 1.6s var(--ease) infinite; }
   @keyframes travel {

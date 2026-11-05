@@ -19,8 +19,7 @@
     "vite": "^8.3.6"
   },
   "dependencies": {
-    "@fontsource-variable/roboto-flex": "^5.3.0",
-    "@material/material-color-utilities": "^0.4.0",
+    "@fontsource-variable/inter": "^5.3.0",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.4",
     "material-symbols": "^0.48.3"

@@ -1,4 +1,4 @@
-import "@fontsource-variable/roboto-flex/full.css";
+import "@fontsource-variable/inter/opsz.css";
 import "material-symbols/rounded.css";
 import "./app.css";
 import { mount } from "svelte";

@@ -11,7 +11,8 @@ A fast, modern Minecraft launcher written in Rust, with a Tauri desktop UI.
 - Live, colour-coded game log (log4j XML output is parsed back into readable lines).
 - Playtime and last-played tracking.
 - Offline accounts. Microsoft sign-in is planned.
-- Dynamic colour: each instance has a block material whose colour themes the launcher.
+- Apple-style themes: light, dark or automatic; seven palettes plus a custom one built from
+  any tint; Apple system accent colours or your own; text size and reduced transparency.
 
 Planned: Microsoft accounts, Fabric/Quilt/Forge/NeoForge, Modrinth and CurseForge
 search for mods, modpacks, shaders and resource packs, and modpack import/export.

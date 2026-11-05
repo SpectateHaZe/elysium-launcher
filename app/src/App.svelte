@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from "./lib/store.svelte";
-  import { applyScheme, materialFor } from "./lib/theme";
+  import { applyAppearance } from "./lib/theme";
   import { theme } from "./lib/dark.svelte";
   import { api } from "./lib/api";
   import Rail from "./components/Rail.svelte";
@@ -15,9 +15,11 @@
 
   void app.init();
 
-  // Dynamic colour follows the instance in focus.
+  if (navigator.userAgent.includes("Mac")) document.documentElement.dataset.platform = "macos";
+
   $effect(() => {
-    applyScheme(materialFor(app.selected?.material, app.selected?.name), theme.dark);
+    if (!app.settings) return;
+    applyAppearance(app.settings.appearance, theme.dark);
     const root = document.documentElement;
     if (!root.classList.contains("theme-ready")) requestAnimationFrame(() => root.classList.add("theme-ready"));
   });

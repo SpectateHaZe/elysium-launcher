@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app, isActive } from "../lib/store.svelte";
-  import { materialFor, tint } from "../lib/theme";
+  import { glowColor, materialFor, tileColor } from "../lib/theme";
   import { theme } from "../lib/dark.svelte";
   import { duration, relative, date } from "../lib/format";
   import { api } from "../lib/api";
@@ -52,7 +52,7 @@
 
 <div class="home">
   {#if inst}
-    <section class="hero" aria-label={inst.name}>
+    <section class="hero" aria-label={inst.name} style:--glow={glowColor(material, theme.dark)}>
       <div class="copy">
         <p class="version">Minecraft {inst.game_version}</p>
         <h1 class="display">{inst.name}</h1>
@@ -98,7 +98,7 @@
       </div>
     </section>
   {:else}
-    <section class="hero empty">
+    <section class="hero empty" style:--glow={glowColor(materialFor("grass"), theme.dark)}>
       <div class="copy">
         <h1 class="display">Pick a version to play</h1>
         <p class="subhead lead">Any Minecraft release, snapshot, beta or alpha. Elysium downloads the game and the right Java for it.</p>
@@ -136,7 +136,6 @@
       <ul class="grid">
         {#each visible as i (i.id)}
           {@const m = materialFor(i.material, i.name)}
-          {@const t = tint(m, theme.dark)}
           {@const selected = inst?.id === i.id}
           {@const running = isActive(app.sessions[i.id])}
           <li>
@@ -147,7 +146,7 @@
               onclick={() => app.select(i.id)}
               ondblclick={() => app.play(i.id)}
             >
-              <span class="swatch state" style:background={t.container} style:color={t.onContainer}>
+              <span class="swatch state" style:background={tileColor(m, theme.dark)}>
                 <Block material={m} key={i.id} size={84} />
                 {#if running}<span class="live" title="Running"></span>{/if}
               </span>
@@ -188,7 +187,7 @@
     line-height: 24px;
     font-weight: 700;
     letter-spacing: -0.01em;
-    color: var(--md-primary);
+    color: var(--accent);
   }
   .display { overflow-wrap: anywhere; }
   .status { margin: 22px 0 36px; min-height: 56px; display: flex; flex-direction: column; gap: 16px; max-width: 600px; color: var(--label-2); }
@@ -245,7 +244,7 @@
   .tile:hover .swatch { transform: scale(1.02); }
   .tile.selected .swatch { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--label); }
   .tile:focus-visible { outline: none; }
-  .tile:focus-visible .swatch { outline: 3px solid var(--md-primary); outline-offset: 6px; }
+  .tile:focus-visible .swatch { outline: 3px solid var(--accent); outline-offset: 6px; }
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
   .live {
     position: absolute;

@@ -48,8 +48,8 @@
     </label>
 
     <section>
-      <h3 class="title-m">Color</h3>
-      <p class="body-m muted">Sets the block and the launcher's colors for this instance.</p>
+      <h3 class="title-m">Block</h3>
+      <p class="body-m muted">The block shown for this instance.</p>
       <MaterialPicker
         value={materialFor(inst.material, inst.name).id}
         onchange={(material) => void app.updateInstance(inst, { material })}

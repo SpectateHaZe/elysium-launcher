@@ -158,10 +158,11 @@ pub fn delete_instance(state: State<'_, AppState>, id: String) -> CmdResult<()> 
 }
 
 #[tauri::command]
-pub fn save_settings(state: State<'_, AppState>, settings: Settings) -> CmdResult<()> {
+pub fn save_settings(state: State<'_, AppState>, mut settings: Settings) -> CmdResult<Settings> {
+    settings.appearance.sanitize();
     settings.save(&state.paths).map_err(err)?;
-    *lock(&state.settings) = settings;
-    Ok(())
+    *lock(&state.settings) = settings.clone();
+    Ok(settings)
 }
 
 #[tauri::command]

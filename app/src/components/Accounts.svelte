@@ -102,10 +102,10 @@
     background: var(--fill);
     color: var(--label);
   }
-  li.active .avatar { background: var(--md-primary); color: var(--md-on-primary); }
+  li.active .avatar { background: var(--accent); color: var(--on-accent); }
   .who { flex: 1; min-width: 0; }
   .who .muted { font-size: 13px; }
-  li.active .who .muted { color: var(--md-primary); font-weight: 600; }
+  li.active .who .muted { color: var(--accent); font-weight: 600; }
   .add h2 { margin: 0 0 12px 4px; }
   .form-group { padding: 20px; }
   .inline { display: flex; gap: 12px; align-items: flex-start; }
