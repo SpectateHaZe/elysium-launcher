@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::VersionType;
@@ -36,7 +35,8 @@ pub struct VersionJson {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logging: Option<Logging>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub release_time: Option<DateTime<Utc>>,
+    // Kept as text: some loaders (NeoForge 21.1.224) write it without a timezone.
+    pub release_time: Option<String>,
     /// Id of the version whose client jar goes on the classpath (set by [`Self::merge`]).
     #[serde(skip)]
     pub jar_id: Option<String>,
@@ -355,6 +355,18 @@ pub fn maven_path(coord: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::rules::{Arch, OsName};
+
+    #[test]
+    fn accepts_release_time_without_timezone() {
+        let v: VersionJson = serde_json::from_str(
+            r#"{"id":"neoforge-21.1.224","releaseTime":"2026-04-05T17:27:20.085805731","inheritsFrom":"1.21.1"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            v.release_time.as_deref(),
+            Some("2026-04-05T17:27:20.085805731")
+        );
+    }
 
     #[test]
     fn maven_paths() {
