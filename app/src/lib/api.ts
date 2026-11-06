@@ -47,6 +47,7 @@ export interface Settings {
   optimized_java_flags: boolean;
   auto_backup: boolean;
   share_files: boolean;
+  confirm_delete: boolean;
   backups_kept: number;
   discord_presence: boolean;
 }
@@ -101,6 +102,7 @@ export interface Instance {
   overrides: Overrides;
   /** Another launcher's game folder this instance shares instead of its own copy. */
   linked_dir: string | null;
+  linked_launcher: string | null;
   icon: string | null;
   icon_version: number;
 }

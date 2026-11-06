@@ -563,8 +563,46 @@ mod tests {
         let inst = import(&mgr, &foreign, true).unwrap();
         assert_eq!(mgr.get(&inst.id).unwrap().game_dir(), src);
         assert!(!inst.dir.join(".minecraft").exists());
+        // No launcher files to recognise (like the official launcher's `.minecraft`): kept.
         mgr.delete(&inst.id).unwrap();
         assert!(!inst.dir.exists());
         assert!(src.join("saves/World/level.dat").exists());
+    }
+
+    #[test]
+    fn deleting_a_linked_instance_deletes_it_in_the_other_launcher() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = InstanceManager::new(dir.path().join("instances"));
+        let foreign = |game_dir: PathBuf| Foreign {
+            source: ForeignSource::CurseForge,
+            name: "Pack".into(),
+            game_version: "1.21.1".into(),
+            loader: ModLoader::Vanilla,
+            loader_version: None,
+            game_dir,
+            icon: None,
+        };
+
+        let cf = dir.path().join("curseforge/Instances/Pack");
+        std::fs::create_dir_all(cf.join("saves")).unwrap();
+        std::fs::write(cf.join("minecraftinstance.json"), b"{}").unwrap();
+        let inst = import(&mgr, &foreign(cf.clone()), true).unwrap();
+        let home = crate::instance::linked_home(&inst.config).unwrap();
+        assert_eq!(home.launcher, "CurseForge");
+        mgr.delete(&inst.id).unwrap();
+        assert!(!cf.exists() && !inst.dir.exists());
+
+        // Prism: the whole instance folder goes, not just its game folder.
+        let prism = dir.path().join("prism/instances/Pack");
+        std::fs::create_dir_all(prism.join(".minecraft")).unwrap();
+        std::fs::write(prism.join("instance.cfg"), b"").unwrap();
+        let inst = import(&mgr, &foreign(prism.join(".minecraft")), true).unwrap();
+        assert_eq!(
+            crate::instance::linked_home(&inst.config).unwrap().launcher,
+            "Prism Launcher"
+        );
+        mgr.delete(&inst.id).unwrap();
+        assert!(!prism.exists());
+        assert!(dir.path().join("prism/instances").exists());
     }
 }

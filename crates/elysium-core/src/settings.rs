@@ -137,6 +137,8 @@ pub struct Settings {
     pub auto_backup: bool,
     /// Experimental: store identical mods and packs once across instances (hard links).
     pub share_files: bool,
+    /// Ask before deleting an instance.
+    pub confirm_delete: bool,
     /// Backups kept per world.
     pub backups_kept: u32,
     /// Show what you're playing in Discord.
@@ -164,6 +166,7 @@ impl Default for Settings {
             optimized_java_flags: true,
             auto_backup: false,
             share_files: false,
+            confirm_delete: true,
             backups_kept: 5,
             discord_presence: true,
         }

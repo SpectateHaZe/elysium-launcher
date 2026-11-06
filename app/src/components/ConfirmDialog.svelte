@@ -4,9 +4,11 @@
     body,
     confirm,
     danger = false,
+    checkbox,
+    checked = $bindable(false),
     onconfirm,
     oncancel,
-  }: { title: string; body: string; confirm: string; danger?: boolean; onconfirm: () => void; oncancel: () => void } = $props();
+  }: { title: string; body: string; confirm: string; danger?: boolean; checkbox?: string; checked?: boolean; onconfirm: () => void; oncancel: () => void } = $props();
 </script>
 
 <svelte:window onkeydown={(e) => e.key === "Escape" && oncancel()} />
@@ -15,6 +17,9 @@
 <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
   <h2 class="headline" id="confirm-title">{title}</h2>
   <p class="body-m muted" id="confirm-body">{body}</p>
+  {#if checkbox}
+    <label class="check"><input type="checkbox" bind:checked />{checkbox}</label>
+  {/if}
   <div class="buttons">
     <button class="btn text state" onclick={oncancel}>Cancel</button>
     <button class="btn filled state" class:danger onclick={onconfirm}>{confirm}</button>
@@ -40,6 +45,8 @@
     animation: rise 300ms var(--ease-out);
   }
   .headline { font-size: 26px; line-height: 32px; letter-spacing: -0.025em; }
+  .check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--label-2); cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
   .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
   @keyframes rise { from { opacity: 0; transform: translate(-50%, calc(-50% + 16px)); } }
 </style>

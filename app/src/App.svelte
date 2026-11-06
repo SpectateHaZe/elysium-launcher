@@ -84,6 +84,7 @@
     if (!root.classList.contains("theme-ready")) requestAnimationFrame(() => root.classList.add("theme-ready"));
   });
 
+  let dontAsk = $state(false);
   const deleting = $derived(
     app.dialog && typeof app.dialog === "object" ? app.instances.find((i) => i.id === (app.dialog as { delete: string }).delete) : undefined,
   );
@@ -143,14 +144,22 @@
   {:else if deleting}
     <ConfirmDialog
       title="Delete {deleting.name}?"
-      body={deleting.linked_dir
-        ? "This removes the instance from Elysium. Its worlds, mods and settings stay in the other launcher's folder."
-        : "This removes the instance folder, including its worlds, screenshots and settings. You can't undo this."}
-      confirm="Delete"
+      body={deleting.linked_launcher
+        ? `This also deletes it from ${deleting.linked_launcher}, including its worlds, mods and settings. You can't undo this.`
+        : deleting.linked_dir
+          ? "This removes the instance from Elysium. Its worlds, mods and settings stay in the other launcher's folder."
+          : "This deletes the instance folder, including its worlds, screenshots and settings. You can't undo this."}
+      confirm={deleting.linked_launcher ? "Delete everywhere" : "Delete"}
       danger
+      checkbox="Don't ask again"
+      bind:checked={dontAsk}
       onconfirm={() => {
+        // `deleting` comes from the dialog state, so read the id before closing it.
+        const id = deleting.id;
         app.dialog = null;
-        void app.deleteInstance(deleting.id);
+        if (dontAsk && app.settings) void app.saveSettings({ ...app.settings, confirm_delete: false });
+        dontAsk = false;
+        void app.deleteInstance(id);
       }}
       oncancel={() => (app.dialog = null)}
     />

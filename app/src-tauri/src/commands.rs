@@ -156,6 +156,8 @@ pub struct InstanceView {
     pub playtime_secs: u64,
     pub overrides: InstanceOverrides,
     pub linked_dir: Option<PathBuf>,
+    /// The launcher a shared instance is also deleted from.
+    pub linked_launcher: Option<String>,
     /// The instance's picture, served to the UI over the asset protocol.
     pub icon: Option<PathBuf>,
     /// Changes whenever the picture does, so the UI can bust its cache.
@@ -165,6 +167,7 @@ pub struct InstanceView {
 impl From<Instance> for InstanceView {
     fn from(i: Instance) -> Self {
         let icon = i.icon_path();
+        let linked_launcher = elysium_core::instance::linked_home(&i.config).map(|h| h.launcher);
         let icon_version = icon
             .as_ref()
             .and_then(|p| std::fs::metadata(p).ok()?.modified().ok())
@@ -185,6 +188,7 @@ impl From<Instance> for InstanceView {
             playtime_secs: i.config.playtime_secs,
             overrides: i.config.overrides,
             linked_dir: i.config.linked_dir,
+            linked_launcher,
         }
     }
 }

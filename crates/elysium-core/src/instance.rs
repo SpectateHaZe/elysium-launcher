@@ -95,7 +95,7 @@ pub struct InstanceConfig {
     #[serde(default)]
     pub overrides: InstanceOverrides,
     /// Another launcher's game folder this instance shares instead of its own copy.
-    /// Deleting the instance leaves that folder alone.
+    /// Deleting the instance deletes it there too, see [`linked_home`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub linked_dir: Option<PathBuf>,
 }
@@ -312,12 +312,24 @@ impl InstanceManager {
 
     /// Permanently deletes the instance folder, including worlds. A linked instance's
     /// game folder lives elsewhere and is kept.
+    /// Deletes the instance. A shared (linked) instance is deleted from the launcher it
+    /// came from too, when that launcher's own instance folder can be told apart (see
+    /// [`linked_home`]); the other launcher's copy goes first, so a failure there (it's
+    /// open and holds a file) leaves the instance in Elysium to try again.
     pub fn delete(&self, id: &str) -> Result<()> {
         let dir = self.dir_for(id)?;
         if !dir.join(CONFIG_FILE).exists() {
             return Err(Error::InstanceNotFound(id.to_owned()));
         }
         let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let config: Option<InstanceConfig> = crate::fsutil::read_json(&dir.join(CONFIG_FILE))?;
+        if let Some(home) = config.as_ref().and_then(linked_home)
+            && home.folder.exists()
+            && !home.folder.starts_with(&self.root)
+            && !self.root.starts_with(&home.folder)
+        {
+            std::fs::remove_dir_all(&home.folder).at(&home.folder)?;
+        }
         std::fs::remove_dir_all(&dir).at(&dir)
     }
 
@@ -327,6 +339,47 @@ impl InstanceManager {
         }
         Ok(self.root.join(id))
     }
+}
+
+/// Where a shared instance lives in the launcher it came from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LinkedHome {
+    /// "CurseForge", "Prism Launcher" or "MultiMC".
+    pub launcher: String,
+    /// That launcher's whole instance folder (removing it removes the instance there).
+    #[serde(skip)]
+    pub folder: PathBuf,
+}
+
+/// The other launcher's instance folder for a shared instance, recognised by that
+/// launcher's own files. `None` when it can't be told apart safely: an instance shared
+/// from the official launcher uses the whole `.minecraft`, which is never deleted.
+pub fn linked_home(config: &InstanceConfig) -> Option<LinkedHome> {
+    let game = config.linked_dir.as_deref()?;
+    if game.components().count() < 3 || !game.is_dir() {
+        return None;
+    }
+    if game.join("minecraftinstance.json").is_file() {
+        return Some(LinkedHome {
+            launcher: "CurseForge".into(),
+            folder: game.to_owned(),
+        });
+    }
+    // Prism and MultiMC: `<root>/instances/<name>/{.minecraft,minecraft}`.
+    let inst = game.parent()?;
+    if !inst.join("instance.cfg").is_file() {
+        return None;
+    }
+    let root = inst.parent()?.parent()?;
+    let launcher = if root.join("multimc.cfg").is_file() {
+        "MultiMC"
+    } else {
+        "Prism Launcher"
+    };
+    Some(LinkedHome {
+        launcher: launcher.into(),
+        folder: inst.to_owned(),
+    })
 }
 
 const MAX_ICON_BYTES: usize = 8 * 1024 * 1024;

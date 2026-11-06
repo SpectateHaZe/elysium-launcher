@@ -191,7 +191,7 @@ class AppState {
       ...(i.icon ? [{ label: "Use block", icon: "deployed_code", run: () => void this.clearIcon(i.id) }] : []),
       { label: "Back up worlds now", icon: "backup", disabled: running, run: () => void this.backupNow(i.id) },
       "separator",
-      { label: "Delete", icon: "delete", danger: true, disabled: running, run: () => (this.dialog = { delete: i.id }) },
+      { label: "Delete", icon: "delete", danger: true, disabled: running, run: () => this.askDelete(i.id) },
     ];
   }
 
@@ -267,6 +267,12 @@ class AppState {
     } catch (e) {
       this.toast(errorText(e));
     }
+  }
+
+  /** Delete, asking first unless the user turned the question off. */
+  askDelete(id: string) {
+    if (this.settings?.confirm_delete === false) void this.deleteInstance(id);
+    else this.dialog = { delete: id };
   }
 
   async deleteInstance(id: string) {

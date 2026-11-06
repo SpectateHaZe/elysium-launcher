@@ -111,6 +111,9 @@
           </select>
         </Row>
       {/if}
+      <Row title="Ask before deleting instances" description="Shared instances are deleted from the launcher they came from too.">
+        <input class="switch" type="checkbox" checked={s.confirm_delete} onchange={(e) => set({ confirm_delete: e.currentTarget.checked })} />
+      </Row>
       <Row title="Store identical mods once (experimental)" description="Instances that use the same mod or pack file share one copy on disk. Each instance still works on its own, and removing a mod from one leaves the others alone.">
         <input class="switch" type="checkbox" checked={s.share_files} onchange={(e) => toggleShare(e.currentTarget.checked)} />
       </Row>

@@ -234,7 +234,7 @@
         <button class="btn outlined state" disabled={running} onclick={() => { close(); void app.play(inst.id, true); }}>Repair</button>
       </Row>
       <Row title="Delete instance" description={inst.linked_dir ? "Removes it from Elysium; its files stay in the other launcher" : "Removes its worlds, screenshots and settings for good"}>
-        <button class="btn tonal danger state" disabled={running} onclick={() => (app.dialog = { delete: inst.id })}>Delete</button>
+        <button class="btn tonal danger state" disabled={running} onclick={() => app.askDelete(inst.id)}>Delete</button>
       </Row>
       </div>
     </section>
