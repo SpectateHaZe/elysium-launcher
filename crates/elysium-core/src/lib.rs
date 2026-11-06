@@ -6,11 +6,14 @@
 pub mod account;
 pub mod assets;
 pub mod auth;
+pub mod backup;
 pub mod content;
+pub mod crash;
 pub mod error;
 pub mod fsutil;
 pub mod horizon;
 pub mod http;
+pub mod import;
 pub mod install;
 pub mod instance;
 pub mod java;
@@ -18,11 +21,13 @@ pub mod launch;
 pub mod loaders;
 pub mod logs;
 pub mod meta;
+pub mod official;
 pub mod paths;
 pub mod progress;
 pub mod rules;
 pub mod secrets;
 pub mod settings;
+pub mod system;
 pub mod versions;
 
 pub use error::{Error, Result};

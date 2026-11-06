@@ -5,6 +5,41 @@
   import { api, errorText, type Instance, type Overrides } from "../lib/api";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 
+  import type { Backup } from "../lib/api";
+  import { date } from "../lib/format";
+
+  let backups = $state<Backup[]>([]);
+  let backingUp = $state(false);
+  let restoring = $state<Backup | null>(null);
+
+  $effect(() => {
+    api.backups(inst.id).then((b) => (backups = b)).catch(() => {});
+  });
+
+  async function backupNow() {
+    backingUp = true;
+    try {
+      const n = await api.backupNow(inst.id);
+      backups = await api.backups(inst.id);
+      app.toast(n === 0 ? "There are no worlds to back up yet" : `Backed up ${n} world${n === 1 ? "" : "s"}`);
+    } catch (e) {
+      app.toast(errorText(e));
+    } finally {
+      backingUp = false;
+    }
+  }
+
+  async function restore(b: Backup) {
+    restoring = null;
+    try {
+      await api.backupRestore(inst.id, b.world, b.file);
+      backups = await api.backups(inst.id);
+      app.toast(`Restored ${b.world}. The version you replaced was backed up first.`);
+    } catch (e) {
+      app.toast(errorText(e));
+    }
+  }
+
   async function exportPack() {
     const path = await saveDialog({ title: "Export as Modrinth pack", defaultPath: `${inst.name}.mrpack`, filters: [{ name: "Modrinth pack", extensions: ["mrpack"] }] });
     if (!path) return;
@@ -152,6 +187,25 @@
           {/if}
         {/snippet}
       </Row>
+      </div>
+    </section>
+
+    <section>
+      <h3 class="title-m">World backups</h3>
+      <div class="group">
+        <Row title="Back up now" description="Saves a copy of every world in this instance">
+          <button class="btn tonal state" disabled={running || backingUp} onclick={backupNow}>{backingUp ? "Backing up" : "Back up"}</button>
+        </Row>
+        {#each backups.slice(0, 8) as b (b.world + b.file)}
+          <Row title={b.world} description="{date(b.created)}, {new Date(b.created).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}, {(b.size / 1048576).toFixed(1)} MB">
+            {#if restoring === b}
+              <button class="btn text state" onclick={() => (restoring = null)}>Cancel</button>
+              <button class="btn filled danger state" onclick={() => restore(b)}>Replace world</button>
+            {:else}
+              <button class="btn text state" disabled={running} onclick={() => (restoring = b)}>Restore</button>
+            {/if}
+          </Row>
+        {/each}
       </div>
     </section>
 

@@ -5,6 +5,7 @@
 
 mod commands;
 mod jobs;
+mod presence;
 mod sessions;
 
 use std::sync::Mutex;
@@ -50,6 +51,7 @@ fn init_state() -> Result<AppState, String> {
         tokens: Mutex::default(),
         jobs: crate::jobs::Jobs::default(),
         msa: Mutex::default(),
+        presence: crate::presence::Presence::default(),
         paths,
     })
 }
@@ -72,6 +74,8 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(state)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -127,6 +131,14 @@ fn main() {
             commands::horizon_status,
             commands::horizon_update,
             commands::horizon_minecraft,
+            commands::import_scan,
+            commands::import_scan_folder,
+            commands::import_run,
+            commands::backups,
+            commands::backup_now,
+            commands::backup_restore,
+            commands::install_performance_mods,
+            commands::system_info,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

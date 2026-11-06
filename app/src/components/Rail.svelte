@@ -38,13 +38,13 @@
   <div class="spacer"></div>
   <button
     class="avatar state"
-    title={app.activeAccount ? `Playing as ${app.activeAccount.username}` : "Add an account"}
+    title={app.activeAccount ? `Playing as ${app.activeAccount.username}` : "Not signed in: games open in the Minecraft Launcher"}
     onclick={() => (app.route = { name: "accounts" })}
   >
     {#if app.activeAccount}
       {app.activeAccount.username.slice(0, 1).toUpperCase()}
     {:else}
-      <span class="icon">person_add</span>
+      <span class="icon">person</span>
     {/if}
   </button>
 </nav>

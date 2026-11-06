@@ -27,11 +27,7 @@
   "bundle": {
     "active": true,
     "targets": [
-      "nsis",
-      "msi",
-      "appimage",
-      "deb",
-      "dmg"
+      "nsis"
     ],
     "icon": [
       "icons/32x32.png",
@@ -45,6 +41,18 @@
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1Q0M0NjU3ODg4OUNCNkIKUldScnk0bUlWMGJNTlhkYjRJdE10aVM4OTdhS2dVeGU5cGtqNVNlcnZMb3prUW5XNkFNU3ZiS2YK",
+      "endpoints": [
+        "https://github.com/SpectateHaZe/elysium-launcher/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

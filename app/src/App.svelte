@@ -17,8 +17,14 @@
   import JobsTray from "./components/JobsTray.svelte";
   import ManualDownloads from "./components/ManualDownloads.svelte";
   import MsaDialog from "./components/MsaDialog.svelte";
+  import UpdateBanner from "./components/UpdateBanner.svelte";
+  import Onboarding from "./components/Onboarding.svelte";
+  import ImportDialog from "./components/ImportDialog.svelte";
+  import { updater } from "./lib/updater.svelte";
 
   void app.init();
+  // Look for a new release shortly after start, without slowing the first paint.
+  setTimeout(() => void updater.check(), 4000);
 
   if (navigator.userAgent.includes("Mac")) document.documentElement.dataset.platform = "macos";
 
@@ -62,8 +68,13 @@
   {#if app.sheetOpen && app.selected}
     <InstanceSheet inst={app.selected} />
   {/if}
+  {#if app.settings && !app.settings.onboarded && app.accounts.accounts.length === 0}
+    <Onboarding />
+  {/if}
   {#if app.dialog === "new-instance"}
     <NewInstanceDialog />
+  {:else if app.dialog === "import"}
+    <ImportDialog />
   {:else if app.dialog === "msa"}
     <MsaDialog />
   {:else if app.dialog === "quit"}
@@ -91,6 +102,7 @@
     <ManualDownloads />
   {/if}
   <JobsTray />
+  <UpdateBanner />
   <Snackbar />
 {/if}
 

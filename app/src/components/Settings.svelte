@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/store.svelte";
-  import { api, errorText, type Settings } from "../lib/api";
+  import { api, errorText, type Settings, type SystemInfo } from "../lib/api";
   import MemoryFields from "./MemoryFields.svelte";
   import JavaField from "./JavaField.svelte";
   import Row from "./Row.svelte";
@@ -9,6 +9,10 @@
   const s = $derived(app.settings!);
 
   let cfKey = $state("");
+  let sys = $state<SystemInfo | null>(null);
+  $effect(() => {
+    api.systemInfo().then((i) => (sys = i)).catch(() => {});
+  });
   let horizonBusy = $state(false);
   let horizonText = $state("Checking");
 
@@ -71,6 +75,30 @@
   </section>
 
   <section>
+    <h2 class="title-l">Play</h2>
+    <div class="group">
+      <Row title="Always open games in the Minecraft Launcher" description="Like the CurseForge app: Elysium installs everything, then the official launcher signs you in and starts the game. Without an account here, this happens automatically.">
+        <input class="switch" type="checkbox" checked={s.always_official_launcher} onchange={(e) => set({ always_official_launcher: e.currentTarget.checked })} />
+      </Row>
+      <Row title="Back up worlds before playing" description="At most once a day per instance. Restore them from the instance's settings.">
+        <input class="switch" type="checkbox" checked={s.auto_backup} onchange={(e) => set({ auto_backup: e.currentTarget.checked })} />
+      </Row>
+      {#if s.auto_backup}
+        <Row title="Backups to keep" description="For each world">
+          <select class="keep" value={s.backups_kept} onchange={(e) => set({ backups_kept: +e.currentTarget.value })} aria-label="Backups to keep">
+            {#each [3, 5, 10, 20] as n (n)}<option value={n}>{n}</option>{/each}
+          </select>
+        </Row>
+      {/if}
+      {#if sys?.discord_available}
+        <Row title="Show what you're playing on Discord">
+          <input class="switch" type="checkbox" checked={s.discord_presence} onchange={(e) => set({ discord_presence: e.currentTarget.checked })} />
+        </Row>
+      {/if}
+    </div>
+  </section>
+
+  <section>
     <h2 class="title-l">Java</h2>
     <div class="group">
     <Row title="Manage Java automatically" description="Downloads the exact Java each Minecraft version was built for">
@@ -80,6 +108,9 @@
           <JavaField path={s.java_path} onchange={(java_path) => set({ java_path })} />
         {/if}
       {/snippet}
+    </Row>
+    <Row title="Optimized Java flags" description="Tuned garbage collection for smoother frame times. Your own arguments below still apply.">
+      <input class="switch" type="checkbox" checked={s.optimized_java_flags} onchange={(e) => set({ optimized_java_flags: e.currentTarget.checked })} />
     </Row>
     <Row title="Java arguments" description="Extra flags for every instance. Quote values that contain spaces.">
       {#snippet below()}
@@ -95,7 +126,12 @@
   <section>
     <h2 class="title-l">Memory</h2>
     <div class="group">
-    <p class="body-m muted lead">4 to 8 GB suits most modpacks. Vanilla runs well on less.</p>
+    <p class="body-m muted lead">
+      {#if sys}This PC has {Math.round(sys.total_memory_mb / 1024)} GB. We recommend {sys.recommended_max_mb / 1024} GB for Minecraft{s.max_memory_mb !== sys.recommended_max_mb ? "" : ", which is what's set"}.{:else}4 to 8 GB suits most modpacks. Vanilla runs well on less.{/if}
+      {#if sys && s.max_memory_mb !== sys.recommended_max_mb}
+        <button class="link" onclick={() => set({ max_memory_mb: sys!.recommended_max_mb, min_memory_mb: Math.min(s.min_memory_mb, sys!.recommended_max_mb) })}>Use recommended</button>
+      {/if}
+    </p>
       <MemoryFields min={s.min_memory_mb} max={s.max_memory_mb} onchange={(min_memory_mb, max_memory_mb) => set({ min_memory_mb, max_memory_mb })} />
     </div>
   </section>
@@ -138,7 +174,7 @@
           </label>
         {/snippet}
       </Row>
-      <Row title="CurseForge API key" description={app.curseforgeConfigured ? "Saved in your system's credential store." : "Lets Discover search CurseForge. Get a key from the CurseForge for Studios console."}>
+      <Row title="CurseForge API key" description={app.curseforgeBuiltin ? "CurseForge works out of the box. You can use your own key instead." : app.curseforgeConfigured ? "Saved in your system's credential store." : "Lets Discover search CurseForge. Get a key from the CurseForge for Studios console."}>
         {#snippet below()}
           <form class="key" onsubmit={saveKey}>
             <label class="field">
@@ -206,6 +242,11 @@
   .size { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 360px; }
   .count { font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; font-weight: 700; }
   .key { display: flex; gap: 8px; align-items: center; }
+  .link { appearance: none; border: 0; background: none; padding: 0; margin-left: 4px; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+  .keep {
+    appearance: none; height: 34px; padding: 0 30px 0 14px; border: 0; border-radius: 10px; color: var(--label); font: inherit; font-weight: 600;
+    background: var(--fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%2386868b' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+  }
   .key .field { flex: 1; }
   .version { margin: 40px 0 0 4px; }
   .group :global(.memory) { padding: 4px 0 16px; }

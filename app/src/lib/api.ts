@@ -38,6 +38,12 @@ export interface Settings {
   hide_on_launch: boolean;
   msa_client_id: string;
   horizon_auto_update: boolean;
+  onboarded: boolean;
+  always_official_launcher: boolean;
+  optimized_java_flags: boolean;
+  auto_backup: boolean;
+  backups_kept: number;
+  discord_presence: boolean;
 }
 
 export interface Skin {
@@ -94,7 +100,8 @@ export type Phase =
   | { kind: "preparing" }
   | { kind: "running"; since: string }
   | { kind: "finished" }
-  | { kind: "crashed"; code: number | null }
+  | { kind: "crashed"; code: number | null; diagnosis: Diagnosis | null }
+  | { kind: "handed_off" }
   | { kind: "failed"; message: string }
   | { kind: "stopped" };
 
@@ -104,6 +111,7 @@ export interface SessionView {
   done: number;
   total: number;
   log_seq: number;
+  diagnosis: Diagnosis | null;
 }
 
 export interface LogEntry {
@@ -129,6 +137,7 @@ export interface VersionManifest {
 export interface Bootstrap {
   settings: Settings;
   curseforge_configured: boolean;
+  curseforge_builtin: boolean;
   horizon_supported: boolean;
   accounts: AccountStore;
   instances: Instance[];
@@ -290,6 +299,42 @@ export interface InstallRequest {
   title: string;
 }
 
+export type Fix =
+  | { kind: "more_memory" }
+  | { kind: "install_mod"; id: string; name: string }
+  | { kind: "check_mod"; name: string }
+  | { kind: "automatic_java"; major: number | null }
+  | { kind: "update_drivers" }
+  | { kind: "remove_duplicate" };
+
+export interface Diagnosis {
+  title: string;
+  detail: string;
+  fixes: Fix[];
+}
+
+export interface Foreign {
+  source: "prism" | "multimc" | "curseforge" | "official";
+  name: string;
+  game_version: string;
+  loader: Loader;
+  loader_version: string | null;
+  game_dir: string;
+}
+
+export interface Backup {
+  world: string;
+  file: string;
+  created: string;
+  size: number;
+}
+
+export interface SystemInfo {
+  total_memory_mb: number;
+  recommended_max_mb: number;
+  discord_available: boolean;
+}
+
 export const api = {
   bootstrap: () => invoke<Bootstrap>("bootstrap"),
   instances: () => invoke<Instance[]>("instances"),
@@ -341,6 +386,14 @@ export const api = {
   horizonStatus: () => invoke<HorizonStatus>("horizon_status"),
   horizonUpdate: () => invoke<number>("horizon_update"),
   horizonMinecraft: () => invoke<string>("horizon_minecraft"),
+  importScan: () => invoke<Foreign[]>("import_scan"),
+  importScanFolder: (path: string) => invoke<Foreign[]>("import_scan_folder", { path }),
+  importRun: (items: Foreign[]) => invoke<number>("import_run", { items }),
+  backups: (id: string) => invoke<Backup[]>("backups", { id }),
+  backupNow: (id: string) => invoke<number>("backup_now", { id }),
+  backupRestore: (id: string, world: string, file: string) => invoke<void>("backup_restore", { id, world, file }),
+  installPerformanceMods: (id: string) => invoke<number>("install_performance_mods", { id }),
+  systemInfo: () => invoke<SystemInfo>("system_info"),
 };
 
 /** Tauri rejects with the Rust error string; normalise anything else. */

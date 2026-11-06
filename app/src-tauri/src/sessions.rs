@@ -17,10 +17,19 @@ const LOG_CAPACITY: usize = 20_000;
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Phase {
     Preparing,
-    Running { since: DateTime<Utc> },
+    Running {
+        since: DateTime<Utc>,
+    },
     Finished,
-    Crashed { code: Option<i32> },
-    Failed { message: String },
+    Crashed {
+        code: Option<i32>,
+        diagnosis: Option<elysium_core::crash::Diagnosis>,
+    },
+    /// Handed to the official Minecraft Launcher, which runs the game from here.
+    HandedOff,
+    Failed {
+        message: String,
+    },
     Stopped,
 }
 
@@ -67,6 +76,16 @@ impl LogBuffer {
     }
 
     /// Lines with `seq >= after`, at most `limit`.
+    /// The last `n` lines' text, for crash diagnosis.
+    pub fn tail(&self, n: usize) -> Vec<String> {
+        let skip = self.lines.len().saturating_sub(n);
+        self.lines
+            .iter()
+            .skip(skip)
+            .map(|l| l.text.clone())
+            .collect()
+    }
+
     pub fn since(&self, after: u64, limit: usize) -> Vec<LogEntry> {
         let first = self.lines.front().map_or(0, |l| l.seq);
         let skip = after.saturating_sub(first) as usize;
@@ -102,22 +121,30 @@ pub struct SessionView {
     pub done: u64,
     pub total: u64,
     pub log_seq: u64,
+    /// Problems spotted in the log while the game runs (Fabric's "missing mods" window
+    /// keeps the game open; an out-of-memory error can hit a background thread), or after
+    /// it crashed.
+    pub diagnosis: Option<elysium_core::crash::Diagnosis>,
 }
 
 pub type Sessions = Mutex<HashMap<String, Session>>;
 
 pub fn view(session: &Session) -> SessionView {
     let (done, total) = session.progress.counts();
+    let phase = session.phase();
+    let logs = session.logs.lock().unwrap_or_else(|e| e.into_inner());
+    let diagnosis = match &phase {
+        Phase::Crashed { diagnosis, .. } => diagnosis.clone(),
+        Phase::Running { .. } => elysium_core::crash::diagnose(&logs.tail(600)),
+        _ => None,
+    };
     SessionView {
-        phase: session.phase(),
         stage: session.progress.stage(),
         done,
         total,
-        log_seq: session
-            .logs
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .next_seq(),
+        log_seq: logs.next_seq(),
+        phase,
+        diagnosis,
     }
 }
 

@@ -41,9 +41,10 @@ class AppState {
   manifest = $state<VersionManifest | null>(null);
   manifestError = $state<string | null>(null);
   snack = $state<Snack | null>(null);
-  dialog = $state<"new-instance" | "quit" | "msa" | { delete: string } | null>(null);
+  dialog = $state<"new-instance" | "quit" | "msa" | "import" | { delete: string } | null>(null);
   sheetOpen = $state(false);
   curseforgeConfigured = $state(false);
+  curseforgeBuiltin = $state(false);
   horizonSupported = $state(false);
   jobs = $state<Job[]>([]);
   /** Instance the Discover page installs into. */
@@ -68,6 +69,7 @@ class AppState {
       this.dataDir = b.data_dir;
       this.version = b.version;
       this.curseforgeConfigured = b.curseforge_configured;
+      this.curseforgeBuiltin = b.curseforge_builtin;
       this.horizonSupported = b.horizon_supported;
       this.selectedId = b.instances[0]?.id ?? null;
       this.ready = true;
@@ -154,12 +156,8 @@ class AppState {
     this.selectedId = id;
   }
 
+  /** Plays `id`. Without an account the game opens in the official Minecraft Launcher. */
   async play(id: string, repair = false) {
-    if (!this.activeAccount) {
-      this.route = { name: "accounts" };
-      this.toast("Add an account to start playing");
-      return;
-    }
     try {
       await api.launch(id, repair);
       void this.pollSessions();

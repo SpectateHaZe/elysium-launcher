@@ -57,7 +57,9 @@
 
 <div class="scroll"><div class="page">
   <h1 class="headline big">Accounts</h1>
-  <p class="body-l muted intro">Choose who you play as. Offline accounts work in singleplayer and on servers that allow them.</p>
+  <p class="body-l muted intro">
+    Signing in here is optional. {app.activeAccount ? "" : "Right now games open in the Minecraft Launcher, which signs you in. "}Offline accounts work in singleplayer and on servers that allow them.
+  </p>
 
   {#if app.accounts.accounts.length}
     <ul class="list group">
@@ -86,11 +88,11 @@
   {/if}
 
   <section class="ms">
-    <h2 class="title-l">Microsoft account</h2>
+    <h2 class="title-l">Microsoft account (optional)</h2>
     <div class="group ms-row">
       <div class="who">
         <p class="title-m">Play online, with your skin</p>
-        <p class="body-m muted">Needed for multiplayer servers, skins, and Horizon.</p>
+        <p class="body-m muted">Start games straight from Elysium, with your skin. Needed for Horizon.</p>
       </div>
       <button class="btn filled state" onclick={() => (app.dialog = "msa")}><span class="icon">login</span>Sign in with Microsoft</button>
     </div>

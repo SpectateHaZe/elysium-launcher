@@ -462,7 +462,7 @@ impl ContentService {
 }
 
 /// `forge-47.2.0` → (Forge, 47.2.0).
-fn parse_cf_loader(id: &str) -> (ModLoader, Option<String>) {
+pub(crate) fn parse_cf_loader(id: &str) -> (ModLoader, Option<String>) {
     let Some((name, version)) = id.split_once('-') else {
         return (ModLoader::Vanilla, None);
     };

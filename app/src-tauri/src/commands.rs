@@ -24,7 +24,7 @@ use elysium_core::logs::{LogLevel, LogLine};
 use elysium_core::meta::VersionManifest;
 use elysium_core::secrets::SecretStore;
 use elysium_core::settings::Settings;
-use elysium_core::{Paths, Progress, horizon, java, versions};
+use elysium_core::{Paths, Progress, horizon, java, official, versions};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::oneshot;
@@ -34,6 +34,10 @@ use crate::jobs::{self, JobView, Jobs};
 use crate::sessions::{self, LogBuffer, LogEntry, Phase, Session, SessionView, Sessions};
 
 const CURSEFORGE_KEY: &str = "curseforge-api-key";
+
+/// CurseForge API key baked in at build time (the release workflow passes the repository
+/// secret), like Prism Launcher ships its own. A key the user enters overrides it.
+const BUILTIN_CURSEFORGE_KEY: Option<&str> = option_env!("ELYSIUM_CURSEFORGE_KEY");
 
 fn refresh_key(uuid: Uuid) -> String {
     format!("msa-refresh:{}", uuid.simple())
@@ -57,14 +61,20 @@ pub struct AppState {
     pub tokens: Mutex<HashMap<Uuid, MicrosoftTokens>>,
     pub jobs: Jobs,
     pub msa: Mutex<MsaLogin>,
+    pub presence: crate::presence::Presence,
 }
 
 impl AppState {
+    fn curseforge_key(&self) -> String {
+        self.secrets
+            .get(CURSEFORGE_KEY)
+            .filter(|k| !k.trim().is_empty())
+            .or_else(|| BUILTIN_CURSEFORGE_KEY.map(str::to_owned))
+            .unwrap_or_default()
+    }
+
     fn content(&self) -> ContentService {
-        ContentService::new(
-            self.http.clone(),
-            &self.secrets.get(CURSEFORGE_KEY).unwrap_or_default(),
-        )
+        ContentService::new(self.http.clone(), &self.curseforge_key())
     }
 
     fn msa(&self) -> CmdResult<MicrosoftAuth> {
@@ -169,26 +179,25 @@ impl From<Instance> for InstanceView {
 pub struct Bootstrap {
     pub settings: Settings,
     pub curseforge_configured: bool,
+    pub curseforge_builtin: bool,
     pub horizon_supported: bool,
     pub accounts: AccountStore,
     pub instances: Vec<InstanceView>,
     pub data_dir: PathBuf,
-    pub version: &'static str,
+    pub version: String,
 }
 
 #[tauri::command]
-pub fn bootstrap(state: State<'_, AppState>) -> CmdResult<Bootstrap> {
+pub fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Bootstrap> {
     Ok(Bootstrap {
         settings: lock(&state.settings).clone(),
-        curseforge_configured: state
-            .secrets
-            .get(CURSEFORGE_KEY)
-            .is_some_and(|k| !k.is_empty()),
+        curseforge_configured: !state.curseforge_key().is_empty(),
+        curseforge_builtin: BUILTIN_CURSEFORGE_KEY.is_some_and(|k| !k.is_empty()),
         horizon_supported: horizon::platform_archive().is_some(),
         accounts: lock(&state.accounts).clone(),
         instances: list(&state)?,
         data_dir: state.paths.root().to_owned(),
-        version: env!("CARGO_PKG_VERSION"),
+        version: app.package_info().version.to_string(),
     })
 }
 
@@ -390,6 +399,9 @@ pub fn stop(state: State<'_, AppState>, id: String) {
 }
 
 /// Installs anything missing, then starts the game. `repair` re-hashes every file.
+///
+/// With no account selected (or when the player prefers it), the game is handed to the
+/// official Minecraft Launcher, which signs the player in.
 #[tauri::command]
 pub async fn launch(
     app: AppHandle,
@@ -398,16 +410,21 @@ pub async fn launch(
     repair: bool,
 ) -> CmdResult<()> {
     let instance = state.instances.get(&id).map_err(err)?;
-    let account = lock(&state.accounts)
-        .active()
-        .cloned()
-        .ok_or("Add an account before playing")?;
-    let horizon_instance = instance.config.loader == ModLoader::Horizon;
-    if horizon_instance && !(account.kind == AccountKind::Microsoft && account.owns_game) {
-        return Err("Horizon needs a Microsoft account that owns Minecraft: Java Edition".into());
-    }
-    let launch_session = state.session_for(&account).await?;
     let settings = lock(&state.settings).clone();
+    let account = lock(&state.accounts).active().cloned();
+    let horizon_instance = instance.config.loader == ModLoader::Horizon;
+    let official = !horizon_instance && (account.is_none() || settings.always_official_launcher);
+    if horizon_instance
+        && !account
+            .as_ref()
+            .is_some_and(|a| a.kind == AccountKind::Microsoft && a.owns_game)
+    {
+        return Err("Horizon needs a Microsoft account that owns Minecraft: Java Edition. Sign in under Accounts.".into());
+    }
+    let launch_session = match (&account, official) {
+        (Some(a), false) => Some(state.session_for(a).await?),
+        _ => None,
+    };
 
     let (kill_tx, kill_rx) = oneshot::channel();
     let session = Session {
@@ -439,10 +456,9 @@ pub async fn launch(
         state.http.clone(),
         state.instances.clone(),
     );
-    let minimize = settings.hide_on_launch;
-    let auto_update = settings.horizon_auto_update;
 
     tauri::async_runtime::spawn(async move {
+        let presence = &app.state::<AppState>().presence;
         let push = {
             let logs = Arc::clone(&logs);
             Arc::new(move |line: LogLine| lock(&logs).push(line))
@@ -454,17 +470,88 @@ pub async fn launch(
         let what = if horizon_instance {
             "Horizon".to_owned()
         } else {
-            format!("Minecraft {}", instance.config.game_version)
+            let loader = match instance.config.loader {
+                ModLoader::Vanilla => String::new(),
+                l => format!(" with {}", l.name()),
+            };
+            format!("Minecraft {}{loader}", instance.config.game_version)
         };
         push(LogLine::launcher(
             LogLevel::Info,
             format!("Preparing {what}"),
         ));
 
+        if settings.auto_backup {
+            progress.set_stage("Backing up worlds", 0);
+            let inst = instance.clone();
+            let keep = settings.backups_kept;
+            match tokio::task::spawn_blocking(move || {
+                elysium_core::backup::auto_backup(&inst, keep)
+            })
+            .await
+            {
+                Ok(Ok(made)) if !made.is_empty() => push(LogLine::launcher(
+                    LogLevel::Info,
+                    format!("Backed up {} world(s)", made.len()),
+                )),
+                Ok(Err(e)) => push(LogLine::launcher(
+                    LogLevel::Warn,
+                    format!("Couldn't back up worlds: {e}"),
+                )),
+                _ => {}
+            }
+        }
+
+        if official {
+            let result = async {
+                let prepared =
+                    install::prepare(&paths, &http, &instance, &options, Arc::clone(&progress))
+                        .await?;
+                let launcher =
+                    official::ensure_launcher(&paths, &http, Arc::clone(&progress)).await?;
+                official::write_profile(&paths, &instance, &prepared.version.id, &effective)?;
+                official::open(&launcher, &paths)
+            }
+            .await;
+            match result {
+                Ok(()) => {
+                    push(LogLine::launcher(
+                        LogLevel::Info,
+                        format!(
+                            "Opened the Minecraft Launcher. Choose “{}” there and press Play.",
+                            instance.config.name
+                        ),
+                    ));
+                    if let Err(e) = instances.record_session(&instance.id, Utc::now(), 0) {
+                        tracing::warn!("could not save last played: {e}");
+                    }
+                    set_phase(Phase::HandedOff);
+                }
+                Err(elysium_core::Error::Cancelled) => {
+                    push(LogLine::launcher(LogLevel::Warn, "Launch cancelled"));
+                    set_phase(Phase::Stopped);
+                }
+                Err(e) => {
+                    push(LogLine::launcher(
+                        LogLevel::Error,
+                        format!("Launch failed: {e}"),
+                    ));
+                    set_phase(Phase::Failed {
+                        message: e.to_string(),
+                    });
+                }
+            }
+            notify(&app);
+            return;
+        }
+        let Some(launch_session) = launch_session else {
+            return;
+        };
+
         let command = async {
             if horizon_instance {
                 let installed = horizon::state(&paths)?.current.is_some();
-                if auto_update || !installed {
+                if settings.horizon_auto_update || !installed {
                     match horizon::install_latest(&paths, &http, Arc::clone(&progress)).await {
                         Ok(v) => push(LogLine::launcher(LogLevel::Info, format!("Horizon {v}"))),
                         // An installed build still works if the update check fails.
@@ -539,14 +626,22 @@ pub async fn launch(
 
         let started = Utc::now();
         set_phase(Phase::Running { since: started });
+        if settings.discord_presence {
+            presence.playing(&what, &instance.config.name, started.timestamp());
+        }
         let window = app.get_webview_window("main");
-        if minimize && let Some(w) = &window {
+        if settings.hide_on_launch
+            && let Some(w) = &window
+        {
             let _ = w.minimize();
         }
         let outcome = launch::run(&command, push.clone(), kill_rx).await;
-        if minimize && let Some(w) = &window {
+        if settings.hide_on_launch
+            && let Some(w) = &window
+        {
             let _ = w.unminimize();
         }
+        presence.clear();
 
         match outcome {
             Ok(exit) => {
@@ -575,7 +670,11 @@ pub async fn launch(
                             detail.map(|d| format!(". {d}")).unwrap_or_default()
                         ),
                     ));
-                    Phase::Crashed { code: exit.code }
+                    let diagnosis = elysium_core::crash::diagnose(&lock(&logs).tail(4000));
+                    Phase::Crashed {
+                        code: exit.code,
+                        diagnosis,
+                    }
                 };
                 set_phase(phase);
             }
@@ -1028,5 +1127,181 @@ pub async fn horizon_minecraft(state: State<'_, AppState>) -> CmdResult<String> 
     match horizon::build_info(&state.paths).await {
         Ok(b) => Ok(b.minecraft),
         Err(_) => Ok("26.3".into()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Import, backups, performance mods, system
+
+#[tauri::command]
+pub fn import_scan() -> Vec<elysium_core::import::Foreign> {
+    elysium_core::import::scan()
+}
+
+#[tauri::command]
+pub fn import_scan_folder(path: PathBuf) -> Vec<elysium_core::import::Foreign> {
+    // A picked folder may be any launcher's; try each format.
+    use elysium_core::import::{ForeignSource, scan_root};
+    for source in [
+        ForeignSource::Prism,
+        ForeignSource::CurseForge,
+        ForeignSource::Official,
+    ] {
+        let found = scan_root(source, &path);
+        if !found.is_empty() {
+            return found;
+        }
+    }
+    Vec::new()
+}
+
+#[tauri::command]
+pub fn import_run(
+    state: State<'_, AppState>,
+    items: Vec<elysium_core::import::Foreign>,
+) -> CmdResult<u64> {
+    let instances = state.instances.clone();
+    let (id, progress, job) = state.jobs.start(format!(
+        "Importing {} instance{}",
+        items.len(),
+        if items.len() == 1 { "" } else { "s" }
+    ));
+    tauri::async_runtime::spawn(async move {
+        let r = tokio::task::spawn_blocking(move || {
+            let mut ok = Vec::new();
+            let mut failed = Vec::new();
+            for (n, f) in items.iter().enumerate() {
+                progress.set_stage(
+                    format!("Copying {} ({} of {})", f.name, n + 1, items.len()),
+                    0,
+                );
+                if progress.is_cancelled() {
+                    break;
+                }
+                match elysium_core::import::import(&instances, f) {
+                    Ok(inst) => ok.push(inst.id),
+                    Err(e) => failed.push(format!("{}: {e}", f.name)),
+                }
+            }
+            Ok::<_, elysium_core::Error>(serde_json::json!({ "imported": ok, "failed": failed }))
+        })
+        .await
+        .map_err(|e| elysium_core::Error::Invalid(e.to_string()))
+        .and_then(|r| r);
+        jobs::finish(&job, r);
+    });
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn backups(
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<Vec<elysium_core::backup::Backup>> {
+    elysium_core::backup::list(&state.instances.get(&id).map_err(err)?).map_err(err)
+}
+
+#[tauri::command]
+pub async fn backup_now(state: State<'_, AppState>, id: String) -> CmdResult<usize> {
+    let inst = state.instances.get(&id).map_err(err)?;
+    if state_is_running(&state, &id) {
+        return Err("Close the game before backing up, so the worlds are saved".into());
+    }
+    let keep = lock(&state.settings).backups_kept;
+    tokio::task::spawn_blocking(move || {
+        let worlds = elysium_core::backup::worlds(&inst);
+        for w in &worlds {
+            elysium_core::backup::backup_world(&inst, w, keep)?;
+        }
+        Ok::<_, elysium_core::Error>(worlds.len())
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
+}
+
+#[tauri::command]
+pub async fn backup_restore(
+    state: State<'_, AppState>,
+    id: String,
+    world: String,
+    file: String,
+) -> CmdResult<()> {
+    let inst = state.instances.get(&id).map_err(err)?;
+    if state_is_running(&state, &id) {
+        return Err("Close the game before restoring a world".into());
+    }
+    let keep = lock(&state.settings).backups_kept;
+    tokio::task::spawn_blocking(move || elysium_core::backup::restore(&inst, &world, &file, keep))
+        .await
+        .map_err(err)?
+        .map_err(err)
+}
+
+fn state_is_running(state: &AppState, id: &str) -> bool {
+    lock(&state.sessions)
+        .get(id)
+        .is_some_and(|s| s.phase().is_active())
+}
+
+/// Well-known performance mods for Fabric and Quilt, by Modrinth slug.
+const PERFORMANCE_MODS: &[&str] = &[
+    "sodium",
+    "lithium",
+    "ferrite-core",
+    "entityculling",
+    "immediatelyfast",
+    "modernfix",
+];
+
+#[tauri::command]
+pub fn install_performance_mods(state: State<'_, AppState>, id: String) -> CmdResult<u64> {
+    let inst = state.instances.get(&id).map_err(err)?;
+    if !matches!(inst.config.loader, ModLoader::Fabric | ModLoader::Quilt) {
+        return Err("Performance mods are available for Fabric and Quilt instances".into());
+    }
+    let content = state.content();
+    let (job_id, progress, job) = state.jobs.start("Adding performance mods");
+    tauri::async_runtime::spawn(async move {
+        let mut installed = Vec::new();
+        for slug in PERFORMANCE_MODS {
+            if progress.is_cancelled() {
+                break;
+            }
+            // Mods without a build for this version are skipped, not fatal.
+            if let Ok(r) = content
+                .install(
+                    &inst,
+                    Source::Modrinth,
+                    slug,
+                    None,
+                    ContentKind::Mod,
+                    None,
+                    Arc::clone(&progress),
+                )
+                .await
+            {
+                installed.extend(r.installed.into_iter().map(|e| e.title));
+            }
+        }
+        jobs::finish(&job, Ok::<_, elysium_core::Error>(installed));
+    });
+    Ok(job_id)
+}
+
+#[derive(Debug, Serialize)]
+pub struct SystemInfo {
+    pub total_memory_mb: u64,
+    pub recommended_max_mb: u32,
+    pub discord_available: bool,
+}
+
+#[tauri::command]
+pub fn system_info() -> SystemInfo {
+    let total = elysium_core::system::total_memory_mb();
+    SystemInfo {
+        total_memory_mb: total,
+        recommended_max_mb: elysium_core::settings::recommended_memory(total).1,
+        discord_available: crate::presence::Presence::available(),
     }
 }

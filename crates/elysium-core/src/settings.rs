@@ -108,6 +108,18 @@ pub struct Settings {
     pub msa_client_id: String,
     /// Install new Horizon nightlies automatically.
     pub horizon_auto_update: bool,
+    /// The first-run welcome has been shown.
+    pub onboarded: bool,
+    /// Always hand games to the official Minecraft Launcher, even with an account here.
+    pub always_official_launcher: bool,
+    /// Add well-tested garbage collector flags for the game's Java.
+    pub optimized_java_flags: bool,
+    /// Back up an instance's worlds before playing (at most once a day).
+    pub auto_backup: bool,
+    /// Backups kept per world.
+    pub backups_kept: u32,
+    /// Show what you're playing in Discord.
+    pub discord_presence: bool,
 }
 
 impl Default for Settings {
@@ -126,13 +138,30 @@ impl Default for Settings {
                 .unwrap_or_default()
                 .to_owned(),
             horizon_auto_update: true,
+            onboarded: false,
+            always_official_launcher: false,
+            optimized_java_flags: true,
+            auto_backup: true,
+            backups_kept: 5,
+            discord_presence: true,
         }
     }
 }
 
 impl Settings {
     pub fn load(paths: &Paths) -> Result<Self> {
-        let mut settings: Self = fsutil::read_json(&paths.settings_file())?.unwrap_or_default();
+        let mut settings: Self = match fsutil::read_json(&paths.settings_file())? {
+            Some(s) => s,
+            // First run: size memory to this computer.
+            None => {
+                let (min, max) = recommended_memory(crate::system::total_memory_mb());
+                Self {
+                    min_memory_mb: min,
+                    max_memory_mb: max,
+                    ..Self::default()
+                }
+            }
+        };
         settings.appearance.sanitize();
         Ok(settings)
     }
@@ -148,11 +177,17 @@ impl Settings {
             .min_memory_mb
             .unwrap_or(self.min_memory_mb)
             .clamp(128, max);
+        let mut jvm_args = Vec::new();
+        if self.optimized_java_flags {
+            jvm_args.extend(optimized_flags(max));
+        }
+        // User arguments come last so they can override the preset.
+        jvm_args.extend(split_args(o.jvm_args.as_deref().unwrap_or(&self.jvm_args)));
         EffectiveSettings {
             java_path: o.java_path.clone().or_else(|| self.java_path.clone()),
             min_memory_mb: min,
             max_memory_mb: max,
-            jvm_args: split_args(o.jvm_args.as_deref().unwrap_or(&self.jvm_args)),
+            jvm_args,
             resolution: o.resolution.or(self.resolution),
         }
     }
@@ -165,6 +200,58 @@ pub struct EffectiveSettings {
     pub max_memory_mb: u32,
     pub jvm_args: Vec<String>,
     pub resolution: Option<Resolution>,
+}
+
+/// Memory for a computer with `total_mb` of RAM: half of it, between 2 and 8 GB,
+/// leaving at least 2 GB for the system. Returns (min, max).
+pub fn recommended_memory(total_mb: u64) -> (u32, u32) {
+    if total_mb == 0 {
+        return (512, 4096);
+    }
+    let half = total_mb / 2;
+    let leave = total_mb.saturating_sub(2048);
+    let max = half.min(leave).clamp(2048, 8192);
+    // Round down to a 512 MB step so the slider shows a tidy value.
+    let max = (max / 512 * 512) as u32;
+    (512, max)
+}
+
+/// G1 garbage-collector tuning widely used for Minecraft (shorter, steadier pauses).
+/// Supported by every Java the game runs on (8 and newer).
+pub fn optimized_flags(max_memory_mb: u32) -> Vec<String> {
+    let mut flags = vec![
+        "-XX:+UseG1GC",
+        "-XX:+ParallelRefProcEnabled",
+        "-XX:MaxGCPauseMillis=200",
+        "-XX:+UnlockExperimentalVMOptions",
+        "-XX:+DisableExplicitGC",
+        "-XX:+AlwaysPreTouch",
+        "-XX:G1HeapWastePercent=5",
+        "-XX:G1MixedGCCountTarget=4",
+        "-XX:InitiatingHeapOccupancyPercent=15",
+        "-XX:G1MixedGCLiveThresholdPercent=90",
+        "-XX:G1RSetUpdatingPauseTimePercent=5",
+        "-XX:SurvivorRatio=32",
+        "-XX:+PerfDisableSharedMem",
+        "-XX:MaxTenuringThreshold=1",
+    ];
+    // Bigger heaps want bigger regions and a larger young generation.
+    if max_memory_mb >= 12 * 1024 {
+        flags.extend([
+            "-XX:G1NewSizePercent=40",
+            "-XX:G1MaxNewSizePercent=50",
+            "-XX:G1HeapRegionSize=16M",
+            "-XX:G1ReservePercent=15",
+        ]);
+    } else {
+        flags.extend([
+            "-XX:G1NewSizePercent=30",
+            "-XX:G1MaxNewSizePercent=40",
+            "-XX:G1HeapRegionSize=8M",
+            "-XX:G1ReservePercent=20",
+        ]);
+    }
+    flags.into_iter().map(str::to_owned).collect()
 }
 
 /// Splits a user-entered argument string on whitespace, honouring double quotes.
@@ -232,6 +319,36 @@ mod tests {
     }
 
     #[test]
+    fn memory_recommendations() {
+        assert_eq!(recommended_memory(4096), (512, 2048));
+        assert_eq!(recommended_memory(8192), (512, 4096));
+        assert_eq!(recommended_memory(16384), (512, 8192));
+        assert_eq!(recommended_memory(65536), (512, 8192));
+        assert_eq!(recommended_memory(12000), (512, 5632));
+        assert_eq!(recommended_memory(0), (512, 4096));
+    }
+
+    #[test]
+    fn optimized_flags_come_before_user_args() {
+        let s = Settings {
+            jvm_args: "-XX:MaxGCPauseMillis=50".into(),
+            ..Default::default()
+        };
+        let e = s.effective(&InstanceOverrides::default());
+        assert_eq!(e.jvm_args.first().map(String::as_str), Some("-XX:+UseG1GC"));
+        assert_eq!(
+            e.jvm_args.last().map(String::as_str),
+            Some("-XX:MaxGCPauseMillis=50")
+        );
+        let off = Settings {
+            optimized_java_flags: false,
+            ..Default::default()
+        }
+        .effective(&InstanceOverrides::default());
+        assert!(off.jvm_args.is_empty());
+    }
+
+    #[test]
     fn overrides_win_and_memory_is_clamped() {
         let s = Settings {
             max_memory_mb: 4096,
@@ -248,6 +365,10 @@ mod tests {
         };
         let e = s.effective(&o);
         assert_eq!(e.max_memory_mb, 2048);
-        assert_eq!(e.jvm_args, vec!["-Dx=1"]);
+        assert_eq!(
+            e.jvm_args.last().map(String::as_str),
+            Some("-Dx=1"),
+            "instance args replace global ones, after the preset"
+        );
     }
 }

@@ -3,7 +3,8 @@
   import { glowColor, materialFor, tileColor } from "../lib/theme";
   import { theme } from "../lib/dark.svelte";
   import { duration, relative, date } from "../lib/format";
-  import { api, LOADER_NAMES } from "../lib/api";
+  import { api, LOADER_NAMES, type Fix } from "../lib/api";
+  import { installProject } from "../lib/install.svelte";
   import Block from "./Block.svelte";
   import WavyProgress from "./WavyProgress.svelte";
 
@@ -36,13 +37,52 @@
       case "running":
         return `Playing now, ${duration(Math.max(0, Math.floor((now - Date.parse(p.since)) / 1000)))} so far.`;
       case "crashed":
-        return "The game crashed last time. The log shows what went wrong.";
+        return p.diagnosis ? null : "The game crashed last time. The log shows what went wrong.";
+      case "handed_off":
+        return `Opened in the Minecraft Launcher. Choose “${inst.name}” there and press Play.`;
       case "failed":
         return p.message;
       default:
         return null;
     }
   });
+
+  const diagnosis = $derived(session?.diagnosis ?? null);
+
+  function fixLabel(f: Fix): string | null {
+    switch (f.kind) {
+      case "more_memory": return "Give it more memory";
+      case "install_mod": return `Install ${f.name}`;
+      case "check_mod": return `Review ${f.name}`;
+      case "automatic_java": return "Use automatic Java";
+      case "remove_duplicate": return "Open mods";
+      default: return null;
+    }
+  }
+
+  async function applyFix(f: Fix) {
+    const i = inst;
+    if (!i) return;
+    switch (f.kind) {
+      case "more_memory":
+        app.sheetOpen = true;
+        app.toast("Turn on Memory under Overrides and raise the maximum");
+        break;
+      case "install_mod":
+        app.targetId = i.id;
+        await installProject({ source: "modrinth", id: f.id, slug: f.id, title: f.name, summary: "", author: "", icon_url: null, downloads: 0, updated: null, kind: "mod", categories: [] });
+        break;
+      case "check_mod":
+      case "remove_duplicate":
+        app.route = { name: "content", id: i.id };
+        break;
+      case "automatic_java":
+        await app.updateInstance(i, { overrides: { ...i.overrides, java_path: null } });
+        if (app.settings?.java_path !== null && app.settings) await app.saveSettings({ ...app.settings, java_path: null });
+        app.toast("Automatic Java is on. Press Play to try again.");
+        break;
+    }
+  }
 
   function summary(i: NonNullable<typeof inst>): string {
     if (!i.last_played) return `Not played yet. Created ${date(i.created)}.`;
@@ -63,6 +103,19 @@
           {#if phase === "preparing" && session}
             <p class="subhead">{session.stage || "Getting ready"}{fraction !== null ? `, ${Math.round(fraction * 100)}%` : ""}</p>
             <WavyProgress value={fraction} label="Preparing {inst.name}" />
+          {:else if diagnosis}
+            <div class="diagnosis" role="alert">
+              <p class="title-m">{diagnosis.title}</p>
+              <p class="body-m">{diagnosis.detail}</p>
+              {#if diagnosis.fixes.some((f) => fixLabel(f))}
+                <div class="fixes">
+                  {#each diagnosis.fixes as f, n (n)}
+                    {@const label = fixLabel(f)}
+                    {#if label}<button class="btn tonal state" onclick={() => applyFix(f)}>{label}</button>{/if}
+                  {/each}
+                </div>
+              {/if}
+            </div>
           {:else if status}
             <p class="subhead" class:error={phase === "failed" || phase === "crashed"}>{status}</p>
           {:else}
@@ -132,6 +185,9 @@
             <input bind:value={query} placeholder="Search instances" />
           </label>
         {/if}
+        <button class="btn text state" onclick={() => (app.dialog = "import")}>
+          <span class="icon">move_to_inbox</span>Import
+        </button>
         <button class="btn tonal state" onclick={() => (app.dialog = "new-instance")}>
           <span class="icon">add</span>New instance
         </button>
@@ -199,6 +255,16 @@
   .display { overflow-wrap: anywhere; }
   .status { margin: 22px 0 36px; min-height: 56px; display: flex; flex-direction: column; gap: 16px; max-width: 600px; color: var(--label-2); }
   .status .error { color: #ff3b30; }
+  .diagnosis {
+    padding: 14px 18px;
+    border-radius: 16px;
+    background: color-mix(in srgb, #ff9500 12%, var(--card));
+    color: var(--label);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .fixes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .lead { margin: 22px 0 36px; max-width: 34ch; color: var(--label-2); }
   .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .art {

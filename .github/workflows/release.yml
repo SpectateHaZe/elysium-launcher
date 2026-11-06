@@ -1,0 +1,62 @@
+name: Release
+
+# Every push to main publishes a new Windows release; installed launchers update
+# themselves from it.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - name: Set version
+        shell: pwsh
+        env:
+          HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && 'yes' || '' }}
+        run: |
+          $version = "0.1.${{ github.run_number }}"
+          $conf = Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $conf.version = $version
+          # Without the signing key a release still builds, just without update files.
+          if (-not $env:HAS_SIGNING_KEY) { $conf.bundle.createUpdaterArtifacts = $false }
+          $conf | ConvertTo-Json -Depth 32 | Set-Content app/src-tauri/tauri.conf.json -Encoding utf8
+          "VERSION=$version" >> $env:GITHUB_ENV
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # Built into the app, like Prism's CurseForge key. Optional: missing secrets
+          # just leave the feature for users to configure.
+          ELYSIUM_CURSEFORGE_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          ELYSIUM_MSA_CLIENT_ID: ${{ secrets.MSA_CLIENT_ID }}
+          ELYSIUM_DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
+        with:
+          projectPath: app
+          tagName: v${{ env.VERSION }}
+          releaseName: Elysium Launcher ${{ env.VERSION }}
+          releaseBody: Built from ${{ github.sha }}.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}

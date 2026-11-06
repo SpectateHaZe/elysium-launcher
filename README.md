@@ -23,18 +23,36 @@ A fast, modern Minecraft launcher written in Rust, with a Tauri desktop UI.
   Java Edition, through its Launch API. Builds update automatically; every download is checked against
   Horizon's Ed25519-signed checksums before it is installed. Horizon requires a Microsoft account that
   owns Java Edition.
+- **Play without signing in here:** like the CurseForge app, Elysium can hand the game to the
+  official Minecraft Launcher, which signs you in. Microsoft sign-in in Elysium is optional, and
+  offline accounts still work for singleplayer.
+- **Crash helper:** explains crashes in plain words (missing mods, out of memory, wrong Java,
+  driver problems, mod conflicts) with one-click fixes.
+- **Import** instances from Prism Launcher, MultiMC, the CurseForge app and the official launcher.
+- **World backups** before playing (once a day) with one-click restore; **Discord** presence.
+- **Sensible defaults:** memory sized to your PC, tuned Java flags, and optional performance mods
+  (Sodium, Lithium, FerriteCore and more) for new Fabric and Quilt instances.
+- **Updates itself** from GitHub releases; every update is signed.
 - **Automatic Java:** each version gets the exact Mojang Java runtime it was built for.
 - **Instances** with their own memory, Java, JVM arguments and window size; live colour-coded game
   log; playtime tracking.
 - **Apple-style themes:** light, dark or automatic; seven palettes plus a custom one built from any
   tint; Apple system accents or your own; text size and reduced transparency.
 
-## Setup
+## Setup (repository secrets)
 
-- **Microsoft sign-in** needs an Azure application (client) ID that Mojang has approved for the
-  Minecraft services API. Enter it in Settings, or build with `ELYSIUM_MSA_CLIENT_ID=<id>`.
-- **CurseForge** needs an API key from the CurseForge for Studios console, entered in Settings.
-  Modrinth works without any key.
+Releases are built by `.github/workflows/release.yml` on every push to `main`. Add these
+repository secrets (Settings, Secrets and variables, Actions):
+
+| Secret | What it does |
+| --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` | Signs updates so installed launchers accept them. Required for auto-updates. |
+| `CURSEFORGE_API_KEY` | Built into the app so CurseForge works out of the box (apply at console.curseforge.com). |
+| `MSA_CLIENT_ID` | Azure app ID approved by Mojang, for optional Microsoft sign-in in Elysium. |
+| `DISCORD_APP_ID` | Discord application ID for Rich Presence (optional). |
+
+Auto-updates download from this repository's releases, so the repository (or a separate
+releases repository) must be public for installed launchers to see new versions.
 
 ## Layout
 

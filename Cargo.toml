@@ -12,3 +12,10 @@ rust-version = "1.95"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# Keep debug builds small: line tables for our code, no debug info for dependencies.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

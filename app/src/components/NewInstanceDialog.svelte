@@ -26,6 +26,7 @@
   let loaderVersion = $state<string | null>(null);
   let loaderError = $state<string | null>(null);
   let horizonMc = $state("26.3");
+  let performance = $state(true);
 
   const loaders: Loader[] = ["vanilla", "fabric", "quilt", "forge", "neoforge"];
   const horizon = $derived(loader === "horizon");
@@ -95,6 +96,13 @@
     try {
       const fallback = horizon ? "Horizon" : loader === "vanilla" ? `Minecraft ${mc}` : `${LOADER_NAMES[loader]} ${mc}`;
       await app.createInstance(name.trim() || fallback, mc, material, loader, horizon ? null : loaderVersion);
+      if (performance && (loader === "fabric" || loader === "quilt") && app.selectedId) {
+        const job = await api.installPerformanceMods(app.selectedId);
+        app.watchJob(job, (j) => {
+          void app.dismissJob(j.id);
+          if (j.state.kind === "done") app.toast(`Added ${(j.state.result as string[]).length} performance mods`);
+        });
+      }
       app.dialog = null;
     } catch (err) {
       error = errorText(err);
@@ -207,6 +215,15 @@
       {/if}
     </div>
   {/if}
+  {#if loader === "fabric" || loader === "quilt"}
+    <label class="perf">
+      <span>
+        <span class="title-m">Add performance mods</span>
+        <span class="body-s muted">Sodium, Lithium, FerriteCore and friends: more FPS, less memory.</span>
+      </span>
+      <input class="switch" type="checkbox" bind:checked={performance} />
+    </label>
+  {/if}
   {/if}
 
   <div>
@@ -291,6 +308,8 @@
   .picker :global(.swatch) { width: 44px; height: 44px; }
   .buttons { display: flex; justify-content: flex-end; gap: 8px; }
   .buttons .import { margin-right: auto; }
+  .perf { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+  .perf > span { display: flex; flex-direction: column; }
   .loaders { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .divider { width: 1px; height: 22px; background: var(--separator); margin: 0 4px; }
   .horizon-chip .icon { color: #ff9f0a; }
