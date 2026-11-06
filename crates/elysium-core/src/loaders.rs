@@ -212,6 +212,9 @@ pub async fn ensure_installed(
     match c.loader {
         ModLoader::Vanilla | ModLoader::Horizon => Ok(mc.to_owned()),
         ModLoader::Fabric | ModLoader::Quilt => {
+            // Instances imported before CurseForge names were parsed correctly carry
+            // `0.18.4-1.21.11`; the loader version is only the first part.
+            let lv = lv.strip_suffix(&format!("-{mc}")).unwrap_or(lv);
             let (base, prefix) = match c.loader {
                 ModLoader::Fabric => (FABRIC_META, "fabric-loader"),
                 _ => (QUILT_META, "quilt-loader"),

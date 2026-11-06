@@ -461,7 +461,8 @@ impl ContentService {
     }
 }
 
-/// `forge-47.2.0` → (Forge, 47.2.0).
+/// `forge-47.2.0` → (Forge, 47.2.0). Fabric and Quilt names end with the Minecraft
+/// version (`fabric-0.18.4-1.21.11`), which isn't part of the loader version.
 pub(crate) fn parse_cf_loader(id: &str) -> (ModLoader, Option<String>) {
     let Some((name, version)) = id.split_once('-') else {
         return (ModLoader::Vanilla, None);
@@ -472,6 +473,13 @@ pub(crate) fn parse_cf_loader(id: &str) -> (ModLoader, Option<String>) {
         "fabric" => ModLoader::Fabric,
         "quilt" => ModLoader::Quilt,
         _ => return (ModLoader::Vanilla, None),
+    };
+    let version = match loader {
+        ModLoader::Fabric | ModLoader::Quilt => version
+            .rsplit_once('-')
+            .filter(|(_, mc)| mc.starts_with(|c: char| c.is_ascii_digit()) && mc.contains('.'))
+            .map_or(version, |(lv, _)| lv),
+        _ => version,
     };
     (loader, Some(version.to_owned()))
 }
@@ -607,6 +615,19 @@ mod tests {
             (ModLoader::Forge, Some("47.2.0".into()))
         );
         assert_eq!(parse_cf_loader("weird"), (ModLoader::Vanilla, None));
+        // CurseForge's Fabric names carry the Minecraft version after the loader's.
+        assert_eq!(
+            parse_cf_loader("fabric-0.18.4-1.21.11"),
+            (ModLoader::Fabric, Some("0.18.4".into()))
+        );
+        assert_eq!(
+            parse_cf_loader("fabric-0.15.0-beta.1-1.20.1"),
+            (ModLoader::Fabric, Some("0.15.0-beta.1".into()))
+        );
+        assert_eq!(
+            parse_cf_loader("fabric-0.16.9"),
+            (ModLoader::Fabric, Some("0.16.9".into()))
+        );
     }
 
     #[test]
