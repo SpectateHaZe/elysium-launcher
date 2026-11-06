@@ -3,6 +3,9 @@
 use regex::Regex;
 use serde::Serialize;
 
+use crate::content::local::ModInfo;
+use crate::instance::Instance;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Fix {
@@ -18,6 +21,10 @@ pub enum Fix {
     UpdateDrivers,
     /// Remove one of two copies of a mod.
     RemoveDuplicate,
+    /// Turn the named mod off (`file` is `mods/<name>.jar`).
+    DisableMod { file: String, name: String },
+    /// Go back to the mods and configs saved before an update.
+    UndoUpdate { snapshot: String, label: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -165,9 +172,243 @@ pub fn diagnose<S: AsRef<str>>(lines: &[S]) -> Option<Diagnosis> {
     None
 }
 
+/// Everything Elysium can say about a crash: known causes first, then the mod the
+/// crash happened in, using the game's crash report when it wrote one.
+pub fn explain(instance: &Instance, mut lines: Vec<String>) -> Option<Diagnosis> {
+    let report = crash_report(instance, &lines);
+    let known = diagnose(&lines).or_else(|| report.as_deref().and_then(diagnose));
+    let found = known.or_else(|| {
+        lines.extend(report.unwrap_or_default());
+        blame(&lines, &crate::content::local::scan_mods(instance))
+    });
+    match crate::snapshot::pending(instance) {
+        None => found,
+        // Crashing right after an update: going back is the surest fix.
+        Some(s) => {
+            let undo = Fix::UndoUpdate {
+                snapshot: s.id,
+                label: s.label.clone(),
+            };
+            Some(match found {
+                Some(mut d) => {
+                    d.fixes.insert(0, undo);
+                    d
+                }
+                None => Diagnosis {
+                    title: "The game crashed after an update".into(),
+                    detail: format!(
+                        "Elysium saved your mods and settings before \"{}\". Go back to them and play again.",
+                        s.label
+                    ),
+                    fixes: vec![undo],
+                },
+            })
+        }
+    }
+}
+
+/// The crash report the game just wrote: the file the log names, or else one written in
+/// the last two minutes.
+fn crash_report(instance: &Instance, lines: &[String]) -> Option<Vec<String>> {
+    let dir = instance.game_dir().join("crash-reports");
+    let named = lines.iter().rev().find_map(|l| {
+        let (_, rest) = l.split_once("Crash report saved to:")?;
+        let p = rest.replace("#@!@#", "").replace("#@?@#", "");
+        let name = std::path::Path::new(p.trim()).file_name()?.to_owned();
+        Some(dir.join(name))
+    });
+    let path = named.filter(|p| p.is_file()).or_else(|| {
+        std::fs::read_dir(&dir)
+            .ok()?
+            .flatten()
+            .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+            .filter(|(t, _)| t.elapsed().is_ok_and(|a| a.as_secs() < 120))
+            .max_by_key(|(t, _)| *t)
+            .map(|(_, p)| p)
+    })?;
+    let text = std::fs::read_to_string(path).ok()?;
+    Some(text.lines().map(str::to_owned).collect())
+}
+
+/// Names the mod a crash happened in, from the crash's stack trace, when [`diagnose`]
+/// found no known cause. Evidence, strongest first: the loader's own "Suspected Mods"
+/// line, mod ids NeoForge prints on each frame, mod ids Mixin bakes into injected method
+/// names, and finally whose package each frame's class is in.
+pub fn blame<S: AsRef<str>>(lines: &[S], mods: &[ModInfo]) -> Option<Diagnosis> {
+    let text: Vec<&str> = lines.iter().map(AsRef::as_ref).collect();
+    // Only the last crash counts; earlier caught exceptions in the log are noise.
+    let start = text
+        .iter()
+        .rposition(|l| l.contains("Minecraft Crash Report"))
+        .or_else(|| text.len().checked_sub(400))
+        .unwrap_or(0);
+    let text = &text[start..];
+
+    let suspected = Regex::new(r"Suspected Mods?: (.+)").expect("valid regex");
+    let paren_id = Regex::new(r"\(([A-Za-z0-9_\-]+)\)").expect("valid regex");
+    let frame =
+        Regex::new(r"^\s*at (?:(\S+)/)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\.[\w$<>]+\(")
+            .expect("valid regex");
+    let module_id = Regex::new(r"(?:^|/)([a-z][a-z0-9_]*)@[^/]+$").expect("valid regex");
+    let mixin_id = Regex::new(
+        r"(?:handler|redirect|modify[A-Za-z]*|wrap[A-Za-z]*|localvar|constant|inject)\$[a-zA-Z0-9]{3,}\$([a-z][a-z0-9_]*)\$",
+    )
+    .expect("valid regex");
+    const NOT_MODS: &[&str] = &[
+        "minecraft",
+        "neoforge",
+        "forge",
+        "fml",
+        "fabricloader",
+        "java",
+        "mixin",
+        "mixinextras",
+    ];
+
+    let mut culprit: Option<&ModInfo> = None;
+    for l in text {
+        if let Some(c) = suspected.captures(l)
+            && !c[1].trim().eq_ignore_ascii_case("none")
+        {
+            culprit = paren_id
+                .captures_iter(&c[1])
+                .find_map(|id| ModInfo::by_id(mods, &id[1]))
+                .or_else(|| {
+                    ModInfo::by_id(mods, c[1].split(',').next().unwrap_or_default().trim())
+                });
+            if culprit.is_some() {
+                break;
+            }
+        }
+    }
+    if culprit.is_none() {
+        // The root cause is the last "Caused by:" section; look there first.
+        let cause = text
+            .iter()
+            .rposition(|l| l.trim_start().starts_with("Caused by:"))
+            .unwrap_or(0);
+        let ordered = text[cause..].iter().chain(text[..cause].iter());
+        let mut by_package = None;
+        for l in ordered {
+            let Some(f) = frame.captures(l) else { continue };
+            let by_id = f
+                .get(1)
+                .and_then(|m| module_id.captures(m.as_str()))
+                .map(|c| c[1].to_owned())
+                .or_else(|| mixin_id.captures(l).map(|c| c[1].to_owned()))
+                .filter(|id| !NOT_MODS.contains(&id.as_str()))
+                .and_then(|id| ModInfo::by_id(mods, &id));
+            if let Some(m) = by_id {
+                culprit = Some(m);
+                break;
+            }
+            if by_package.is_none() {
+                by_package = ModInfo::owner(mods, &f[2]);
+            }
+        }
+        culprit = culprit.or(by_package);
+    }
+    let m = culprit?;
+    d(
+        &format!("{} probably caused the crash", m.name),
+        format!(
+            "The crash happened inside {}. Update it, or turn it off and play again to check. Other mods that need it may stop working while it's off.",
+            m.name
+        ),
+        vec![
+            Fix::DisableMod {
+                file: m.file.clone(),
+                name: m.name.clone(),
+            },
+            Fix::CheckMod {
+                name: m.name.clone(),
+            },
+        ],
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn mods() -> Vec<ModInfo> {
+        let m = |id: &str, name: &str, pkg: &str| ModInfo {
+            file: format!("mods/{id}.jar"),
+            ids: vec![id.to_owned()],
+            name: name.to_owned(),
+            packages: vec![pkg.to_owned()],
+        };
+        vec![
+            m("iris", "Iris", "net.irisshaders.iris"),
+            m("sodium", "Sodium", "net.caffeinemc.mods"),
+            m("create", "Create", "com.simibubi.create"),
+        ]
+    }
+
+    fn blamed(log: &[&str]) -> Option<String> {
+        blame(log, &mods()).map(|d| match &d.fixes[0] {
+            Fix::DisableMod { name, .. } => name.clone(),
+            f => panic!("unexpected {f:?}"),
+        })
+    }
+
+    #[test]
+    fn offers_undo_after_an_update() {
+        let dir = tempfile::tempdir().unwrap();
+        let inst = crate::instance::InstanceManager::new(dir.path())
+            .create("P", "1.21.1")
+            .unwrap();
+        assert!(explain(&inst, vec!["boom".into()]).is_none());
+        let s = crate::snapshot::take(&inst, "Updating Sodium").unwrap();
+        let d = explain(&inst, vec!["java.lang.OutOfMemoryError".into()]).unwrap();
+        assert_eq!(
+            d.fixes,
+            [
+                Fix::UndoUpdate {
+                    snapshot: s.id,
+                    label: "Updating Sodium".into()
+                },
+                Fix::MoreMemory
+            ]
+        );
+    }
+
+    #[test]
+    fn blames_the_mod_in_the_trace() {
+        // Plain frames: the deepest cause wins over the outer exception.
+        let log = [
+            "java.lang.RuntimeException: boom",
+            "	at net.minecraft.client.Minecraft.run(Minecraft.java:10)",
+            "	at knot//net.caffeinemc.mods.sodium.Render.draw(Render.java:5)",
+            "Caused by: java.lang.NullPointerException",
+            "	at knot//com.simibubi.create.content.Foo.tick(Foo.java:3)",
+        ];
+        assert_eq!(blamed(&log).as_deref(), Some("Create"));
+        // NeoForge names the mod on each frame; Mixin names it in injected methods.
+        let neo =
+            ["	at TRANSFORMER/iris@1.8.0/net.minecraft.client.Renderer.render(Renderer.java:1)"];
+        assert_eq!(blamed(&neo).as_deref(), Some("Iris"));
+        let mixin = ["	at net.minecraft.world.Level.handler$zbc000$sodium$onTick(Level.java:4)"];
+        assert_eq!(blamed(&mixin).as_deref(), Some("Sodium"));
+        // Forge's own verdict comes first.
+        let forge = [
+            "Suspected Mods: Iris (iris)",
+            "	at com.simibubi.create.X.y(X.java:1)",
+        ];
+        assert_eq!(blamed(&forge).as_deref(), Some("Iris"));
+        // Nothing to go on: no blame.
+        assert_eq!(
+            blamed(&["	at net.minecraft.client.Main.main(Main.java:1)"]),
+            None
+        );
+        // Only the last crash report counts.
+        let two = [
+            "	at com.simibubi.create.X.y(X.java:1)",
+            "---- Minecraft Crash Report ----",
+            "	at net.irisshaders.iris.Iris.z(Iris.java:1)",
+        ];
+        assert_eq!(blamed(&two).as_deref(), Some("Iris"));
+    }
 
     #[test]
     fn fabric_missing_dependency() {

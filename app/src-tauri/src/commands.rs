@@ -431,6 +431,46 @@ pub async fn instance_overview(
 }
 
 #[tauri::command]
+pub fn startup_report(
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<Option<elysium_core::startup::StartupReport>> {
+    let inst = state.instances.get(&id).map_err(err)?;
+    Ok(elysium_core::startup::history(&inst).pop())
+}
+
+#[tauri::command]
+pub fn snapshot_take(
+    state: State<'_, AppState>,
+    id: String,
+    label: String,
+) -> CmdResult<elysium_core::snapshot::Snapshot> {
+    let inst = state.instances.get(&id).map_err(err)?;
+    elysium_core::snapshot::take(&inst, &label).map_err(err)
+}
+
+#[tauri::command]
+pub fn snapshot_pending(
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<Option<elysium_core::snapshot::Snapshot>> {
+    let inst = state.instances.get(&id).map_err(err)?;
+    Ok(elysium_core::snapshot::pending(&inst))
+}
+
+#[tauri::command]
+pub fn snapshot_restore(state: State<'_, AppState>, id: String, snapshot: String) -> CmdResult<()> {
+    if lock(&state.sessions)
+        .get(&id)
+        .is_some_and(|s| s.phase().is_active())
+    {
+        return Err("Stop the game first".into());
+    }
+    let inst = state.instances.get(&id).map_err(err)?;
+    elysium_core::snapshot::restore(&inst, &snapshot).map_err(err)
+}
+
+#[tauri::command]
 pub fn open_screenshot(state: State<'_, AppState>, id: String, name: String) -> CmdResult<()> {
     if name.is_empty() || name.contains(['/', '\\']) || name.starts_with('.') {
         return Err("Not a screenshot".into());
@@ -725,7 +765,52 @@ pub async fn launch(
         {
             let _ = w.minimize();
         }
-        let outcome = launch::run(&command, push.clone(), kill_rx).await;
+        // Time each game line until the main menu, for the startup profiler.
+        let marks: Arc<Mutex<Option<Vec<elysium_core::startup::Mark>>>> =
+            Arc::new(Mutex::new(Some(Vec::new())));
+        let ready = Arc::new(AtomicBool::new(false));
+        let on_log: Arc<dyn Fn(LogLine) + Send + Sync> = {
+            let (push, marks, ready) = (push.clone(), Arc::clone(&marks), Arc::clone(&ready));
+            let t0 = std::time::Instant::now();
+            Arc::new(move |line: LogLine| {
+                if !ready.load(Ordering::Relaxed)
+                    && line.source == elysium_core::logs::LogSource::Game
+                    && let Some(list) = lock(&marks).as_mut()
+                {
+                    if elysium_core::startup::is_ready(&line.text) {
+                        ready.store(true, Ordering::Relaxed);
+                    }
+                    if list.len() < 100_000 {
+                        list.push(elysium_core::startup::Mark {
+                            ms: t0.elapsed().as_millis() as u64,
+                            logger: line.logger.clone(),
+                            text: line.text.clone(),
+                        });
+                    }
+                }
+                push(line)
+            })
+        };
+        let outcome = launch::run(&command, on_log, kill_rx).await;
+        let timed = lock(&marks).take();
+        if ready.load(Ordering::Relaxed)
+            && let Some(list) = timed
+        {
+            let inst = instance.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                // It reached the menu: whatever changed since the last snapshot works.
+                if let Err(e) = elysium_core::snapshot::verify(&inst) {
+                    tracing::warn!("couldn't update snapshots: {e}");
+                }
+                let mods = elysium_core::content::local::scan_mods(&inst);
+                if let Some(r) = elysium_core::startup::analyze(&list, &mods)
+                    && let Err(e) = elysium_core::startup::record(&inst, r)
+                {
+                    tracing::warn!("couldn't save startup times: {e}");
+                }
+            })
+            .await;
+        }
         if settings.hide_on_launch
             && let Some(w) = &window
         {
@@ -760,7 +845,14 @@ pub async fn launch(
                             detail.map(|d| format!(". {d}")).unwrap_or_default()
                         ),
                     ));
-                    let diagnosis = elysium_core::crash::diagnose(&lock(&logs).tail(4000));
+                    let tail = lock(&logs).tail(4000);
+                    let inst = instance.clone();
+                    let diagnosis = tokio::task::spawn_blocking(move || {
+                        elysium_core::crash::explain(&inst, tail)
+                    })
+                    .await
+                    .ok()
+                    .flatten();
                     Phase::Crashed {
                         code: exit.code,
                         diagnosis,
@@ -1310,6 +1402,27 @@ pub fn import_run(
         );
     });
     Ok(id)
+}
+
+/// Shared storage: links identical mods and packs across instances that aren't running.
+#[tauri::command]
+pub async fn share_files(
+    state: State<'_, AppState>,
+) -> CmdResult<elysium_core::share::ShareReport> {
+    let dirs: Vec<PathBuf> = state
+        .instances
+        .list()
+        .map_err(err)?
+        .into_iter()
+        .filter(|i| !state_is_running(&state, &i.id))
+        .map(|i| i.game_dir())
+        .collect();
+    tokio::task::spawn_blocking(move || {
+        elysium_core::share::share(&dirs, &elysium_core::Progress::new())
+    })
+    .await
+    .map_err(err)?
+    .map_err(err)
 }
 
 #[tauri::command]

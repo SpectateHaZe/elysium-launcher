@@ -349,7 +349,7 @@ fn bring_over(from: &Path, to: &Path) -> Result<()> {
     std::fs::copy(from, to).at(from).map(|_| ())
 }
 
-fn copy_tree(src: &Path, dest: &Path) -> Result<()> {
+pub(crate) fn copy_tree(src: &Path, dest: &Path) -> Result<()> {
     let mut files = Vec::new();
     plan_tree(src, dest, true, &mut files)?;
     // Small files dominate (configs, map data), so per-file overhead matters more than

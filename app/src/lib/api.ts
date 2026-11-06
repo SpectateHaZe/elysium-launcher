@@ -46,6 +46,7 @@ export interface Settings {
   always_official_launcher: boolean;
   optimized_java_flags: boolean;
   auto_backup: boolean;
+  share_files: boolean;
   backups_kept: number;
   discord_presence: boolean;
 }
@@ -108,7 +109,21 @@ export interface Overview {
   mods: number;
   worlds: number;
   size: number;
+  startup_ms: number | null;
   screenshots: { path: string; taken: number }[];
+}
+
+export interface StartupReport {
+  at: string;
+  total_ms: number;
+  mods: { name: string; ms: number }[];
+}
+
+export interface Snapshot {
+  id: string;
+  at: string;
+  label: string;
+  verified: boolean;
 }
 
 /** URL for a local image the window is allowed to read. */
@@ -256,6 +271,7 @@ export interface InstalledContent {
   entry: ContentEntry;
   enabled: boolean;
   size: number;
+  local_icon: string | null;
 }
 
 export interface ContentUpdate {
@@ -330,7 +346,9 @@ export type Fix =
   | { kind: "check_mod"; name: string }
   | { kind: "automatic_java"; major: number | null }
   | { kind: "update_drivers" }
-  | { kind: "remove_duplicate" };
+  | { kind: "remove_duplicate" }
+  | { kind: "disable_mod"; file: string; name: string }
+  | { kind: "undo_update"; snapshot: string; label: string };
 
 export interface Diagnosis {
   title: string;
@@ -373,6 +391,11 @@ export const api = {
   clearInstanceIcon: (id: string) => invoke<Instance>("clear_instance_icon", { id }),
   instanceOverview: (id: string) => invoke<Overview>("instance_overview", { id }),
   openScreenshot: (id: string, name: string) => invoke<void>("open_screenshot", { id, name }),
+  shareFiles: () => invoke<{ linked: number; saved: number }>("share_files"),
+  startupReport: (id: string) => invoke<StartupReport | null>("startup_report", { id }),
+  snapshotTake: (id: string, label: string) => invoke<Snapshot>("snapshot_take", { id, label }),
+  snapshotPending: (id: string) => invoke<Snapshot | null>("snapshot_pending", { id }),
+  snapshotRestore: (id: string, snapshot: string) => invoke<void>("snapshot_restore", { id, snapshot }),
   deleteInstance: (id: string) => invoke<void>("delete_instance", { id }),
   saveSettings: (settings: Settings) => invoke<Settings>("save_settings", { settings }),
   addOfflineAccount: (username: string) => invoke<AccountStore>("add_offline_account", { username }),

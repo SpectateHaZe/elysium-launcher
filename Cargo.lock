@@ -1166,6 +1166,7 @@ dependencies = [
  "md-5 0.11.0",
  "regex",
  "reqwest",
+ "same-file",
  "serde",
  "serde_json",
  "sha1",

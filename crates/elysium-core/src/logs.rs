@@ -22,6 +22,8 @@ pub struct LogLine {
     pub level: LogLevel,
     pub source: LogSource,
     pub text: String,
+    /// The log4j logger that wrote it, when the game prints structured events.
+    pub logger: Option<String>,
 }
 
 impl LogLine {
@@ -30,6 +32,7 @@ impl LogLine {
             level,
             source: LogSource::Launcher,
             text: text.into(),
+            logger: None,
         }
     }
 }
@@ -76,6 +79,7 @@ fn plain(line: &str) -> LogLine {
         level: guess_level(line),
         source: LogSource::Game,
         text: line.to_owned(),
+        logger: None,
     }
 }
 
@@ -141,6 +145,7 @@ fn parse_event(event: &str) -> Vec<LogLine> {
         .map(|t| t.format("%H:%M:%S").to_string())
         .unwrap_or_default();
     let message = cdata_in(event, "Message").unwrap_or_default();
+    let logger = attr(event, "logger").map(unescape);
     let prefix = format!(
         "[{time}] [{thread}/{}]: ",
         attr(event, "level").unwrap_or("INFO")
@@ -157,6 +162,7 @@ fn parse_event(event: &str) -> Vec<LogLine> {
             level,
             source: LogSource::Game,
             text,
+            logger: logger.clone(),
         });
     }
     if lines.is_empty() {
@@ -164,6 +170,7 @@ fn parse_event(event: &str) -> Vec<LogLine> {
             level,
             source: LogSource::Game,
             text: prefix,
+            logger: logger.clone(),
         });
     }
     if let Some(throwable) = cdata_in(event, "Throwable") {
@@ -171,6 +178,7 @@ fn parse_event(event: &str) -> Vec<LogLine> {
             level: LogLevel::Error,
             source: LogSource::Game,
             text: t.to_owned(),
+            logger: logger.clone(),
         }));
     }
     lines

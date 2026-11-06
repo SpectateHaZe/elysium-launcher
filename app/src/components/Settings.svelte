@@ -5,6 +5,7 @@
   import JavaField from "./JavaField.svelte";
   import Row from "./Row.svelte";
   import AppearanceSettings from "./AppearanceSettings.svelte";
+  import { bytes } from "../lib/format";
 
   const s = $derived(app.settings!);
 
@@ -61,6 +62,26 @@
   function set(patch: Partial<Settings>) {
     void app.saveSettings({ ...s, ...patch });
   }
+
+  let sharing = $state(false);
+  let shared = $state<{ linked: number; saved: number } | null>(null);
+
+  async function runShare() {
+    sharing = true;
+    try {
+      shared = await api.shareFiles();
+      app.toast(shared.linked ? `Shared ${shared.linked} files, saving ${bytes(shared.saved)} in total` : `Nothing new to share. Saving ${bytes(shared.saved)} in total.`);
+    } catch (e) {
+      app.toast(errorText(e));
+    } finally {
+      sharing = false;
+    }
+  }
+
+  async function toggleShare(on: boolean) {
+    await app.saveSettings({ ...s, share_files: on });
+    if (on) await runShare();
+  }
 </script>
 
 <div class="scroll"><div class="page">
@@ -88,6 +109,14 @@
           <select class="keep" value={s.backups_kept} onchange={(e) => set({ backups_kept: +e.currentTarget.value })} aria-label="Backups to keep">
             {#each [3, 5, 10, 20] as n (n)}<option value={n}>{n}</option>{/each}
           </select>
+        </Row>
+      {/if}
+      <Row title="Store identical mods once (experimental)" description="Instances that use the same mod or pack file share one copy on disk. Each instance still works on its own, and removing a mod from one leaves the others alone.">
+        <input class="switch" type="checkbox" checked={s.share_files} onchange={(e) => toggleShare(e.currentTarget.checked)} />
+      </Row>
+      {#if s.share_files}
+        <Row title={sharing ? "Looking for identical files" : shared ? `Saving ${bytes(shared.saved)}` : "Shared storage is on"} description="Runs when you turn it on. Run it again after adding instances or mods.">
+          <button class="btn tonal state" disabled={sharing} onclick={runShare}>{sharing ? "Working" : "Run now"}</button>
         </Row>
       {/if}
       {#if sys?.discord_available}

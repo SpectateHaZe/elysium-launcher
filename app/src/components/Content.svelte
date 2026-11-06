@@ -1,7 +1,8 @@
 <!-- What's installed in an instance: enable, disable, remove, update. -->
 <script lang="ts">
   import { app, type MenuItem } from "../lib/store.svelte";
-  import { api, errorText, LOADER_NAMES, type ContentKind, type ContentUpdate, type InstalledContent } from "../lib/api";
+  import { api, errorText, fileSrc, LOADER_NAMES, type ContentKind, type ContentUpdate, type InstalledContent, type Snapshot, type StartupReport } from "../lib/api";
+  import { span } from "../lib/format";
   import { installProject, installedVersion, KIND_LABELS } from "../lib/install.svelte";
 
   let { id }: { id: string } = $props();
@@ -15,9 +16,29 @@
   const inst = $derived(app.instances.find((i) => i.id === id));
   const shown = $derived(items.filter((i) => i.entry.kind === tab));
 
+  let pending = $state<Snapshot | null>(null);
+  let startup = $state<StartupReport | null>(null);
+
   async function load() {
     try {
       items = await api.contentList(id);
+      pending = await api.snapshotPending(id);
+    } catch (e) {
+      app.toast(errorText(e));
+    }
+  }
+
+  $effect(() => {
+    api.startupReport(id).then((r) => (startup = r)).catch(() => (startup = null));
+  });
+
+  async function undo() {
+    if (!pending) return;
+    try {
+      await api.snapshotRestore(id, pending.id);
+      app.toast("Mods and settings are back to how they were before the update");
+      updates = null;
+      await load();
     } catch (e) {
       app.toast(errorText(e));
     }
@@ -76,8 +97,15 @@
     }
   }
 
-  function update(u: ContentUpdate) {
+  async function update(u: ContentUpdate) {
     const item = items.find((i) => i.entry.file === u.file);
+    // Save the working mods and configs first, so a bad update can be undone.
+    try {
+      pending = await api.snapshotTake(id, `Updating ${item?.entry.title ?? u.latest.name}`);
+    } catch (e) {
+      app.toast(`Couldn't save a restore point, so nothing was updated. ${errorText(e)}`);
+      return;
+    }
     app.targetId = id;
     void installProject(
       {
@@ -112,6 +140,11 @@
         <p class="body-m muted">Minecraft {inst.game_version}{inst.loader !== "vanilla" ? ` with ${LOADER_NAMES[inst.loader]} ${inst.loader_version ?? ""}` : ""}</p>
       {/if}
     </div>
+    {#if pending}
+      <button class="btn text state" title="Go back to the mods and settings from before “{pending.label}”" onclick={undo}>
+        <span class="icon">undo</span>Undo update
+      </button>
+    {/if}
     <button class="btn tonal state" disabled={checking} onclick={checkUpdates}>
       <span class="icon">update</span>{checking ? "Checking" : "Check for updates"}
     </button>
@@ -127,6 +160,22 @@
       </button>
     {/each}
   </div>
+
+  {#if tab === "mod" && startup}
+    <div class="startup group">
+      <p class="title-m">Reached the main menu in {span(startup.total_ms)}</p>
+      {#if startup.mods.length}
+        <p class="body-s muted">Mods that took the longest to load, estimated from the game log</p>
+        <ol>
+          {#each startup.mods as m (m.name)}
+            <li><span class="body-m">{m.name}</span><span class="bar" style:--w="{Math.round((m.ms / (startup.mods[0]?.ms ?? m.ms)) * 100)}%"></span><span class="body-s muted num">{span(m.ms)}</span></li>
+          {/each}
+        </ol>
+      {:else}
+        <p class="body-s muted">No single mod stood out.</p>
+      {/if}
+    </div>
+  {/if}
 
   {#if updates && updates.length}
     <div class="updates group">
@@ -155,8 +204,8 @@
     <ul class="list group">
       {#each shown as item (item.entry.file)}
         <li class:off={!item.enabled} oncontextmenu={(e) => app.openMenu(e, menuFor(item))}>
-          {#if item.entry.icon_url}
-            <img src={item.entry.icon_url} alt="" referrerpolicy="no-referrer" />
+          {#if item.entry.icon_url || item.local_icon}
+            <img src={item.entry.icon_url ?? fileSrc(item.local_icon ?? "")} alt="" referrerpolicy="no-referrer" loading="lazy" class:pixel={!item.entry.icon_url} />
           {:else}
             <span class="ph" aria-hidden="true"><span class="icon">{tab === "mod" ? "extension" : tab === "shader" ? "wb_sunny" : "palette"}</span></span>
           {/if}
@@ -181,6 +230,11 @@
   .title h1 { font-size: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .count { margin-left: 6px; color: var(--label-3); font-variant-numeric: tabular-nums; }
   .updates { margin-top: 20px; padding: 14px 20px; }
+  .startup { margin-top: 20px; padding: 14px 20px; display: flex; flex-direction: column; gap: 4px; }
+  .startup ol { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .startup ol li { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 76px; align-items: center; gap: 12px; padding: 0; border: 0; }
+  .startup .bar { height: 6px; border-radius: 3px; background: linear-gradient(var(--accent), var(--accent)) 0 0 / var(--w) 100% no-repeat, var(--fill); }
+  .startup .num { text-align: right; font-variant-numeric: tabular-nums; }
   .update-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--separator); }
   .update-row .body-m { flex: 1; }
   .list { list-style: none; margin: 20px 0 0; padding: 4px 16px; }
@@ -189,6 +243,8 @@
   li.off .info { opacity: 0.5; }
   li img, .ph { width: 40px; height: 40px; border-radius: 10px; flex: none; object-fit: cover; background: var(--fill); display: grid; place-items: center; color: var(--label-2); }
   .ph .icon { font-size: 22px; }
+  /* Mod logos inside jars are often tiny pixel art. */
+  li img.pixel { image-rendering: pixelated; }
   .info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .info .title-m { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { margin-top: 40px; max-width: 52ch; display: flex; flex-direction: column; gap: 6px; }

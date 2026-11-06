@@ -15,6 +15,8 @@ pub struct Overview {
     pub worlds: usize,
     /// Bytes in the game folder, worlds included.
     pub size: u64,
+    /// Process start to main menu, last time it was measured.
+    pub startup_ms: Option<u64>,
     /// Newest first, at most [`SCREENSHOTS`].
     pub screenshots: Vec<Screenshot>,
 }
@@ -41,6 +43,7 @@ pub fn overview(instance: &Instance) -> Overview {
         mods,
         worlds: crate::backup::worlds(instance).len(),
         size: dir_size(&game),
+        startup_ms: crate::startup::history(instance).last().map(|r| r.total_ms),
         screenshots: screenshots(&game.join("screenshots")),
     }
 }

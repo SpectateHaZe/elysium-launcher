@@ -97,6 +97,8 @@ pub struct InstalledContent {
     pub entry: ContentEntry,
     pub enabled: bool,
     pub size: u64,
+    /// Picture read from the file itself, for content without one from Modrinth or CurseForge.
+    pub local_icon: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -386,7 +388,21 @@ impl ContentService {
         }) {
             let sha1 = match &item.entry.sha1 {
                 Some(s) => s.clone(),
-                None => fsutil::sha1_file(&current_path(instance, &item.entry.file, item.enabled))?,
+                None => {
+                    let path = current_path(instance, &item.entry.file, item.enabled);
+                    // Unpacked resource and shader packs are folders: nothing to look up.
+                    if path.is_dir() {
+                        continue;
+                    }
+                    match fsutil::sha1_file(&path) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            // One locked or unreadable file shouldn't stop the whole check.
+                            tracing::warn!("skipping {} in update check: {e}", item.entry.file);
+                            continue;
+                        }
+                    }
+                }
             };
             by_hash.push((sha1, item));
         }
@@ -485,6 +501,7 @@ fn current_path(instance: &Instance, rel: &str, enabled: bool) -> PathBuf {
 /// Mods, resource packs and shaders in the instance, known or not.
 pub fn list(instance: &Instance) -> Result<Vec<InstalledContent>> {
     let index = ContentIndex::load(instance)?;
+    let mut icons = super::local::IconCache::open(instance);
     let mut out = Vec::new();
     for kind in [
         ContentKind::Mod,
@@ -515,17 +532,24 @@ pub fn list(instance: &Instance) -> Result<Vec<InstalledContent>> {
             }
             let rel = format!("{}/{base}", kind.folder());
             let known = index.entries.iter().find(|e| e.file == rel).cloned();
+            let (local_name, local_icon) = if known.as_ref().is_some_and(|k| k.icon_url.is_some()) {
+                (None, None)
+            } else {
+                icons.get(&entry.path(), kind, &meta)
+            };
             out.push(InstalledContent {
+                local_icon,
                 entry: known.unwrap_or(ContentEntry {
                     file: rel,
                     kind,
                     source: None,
                     project_id: None,
                     version_id: None,
-                    title: base
-                        .trim_end_matches(".jar")
-                        .trim_end_matches(".zip")
-                        .to_owned(),
+                    title: local_name.unwrap_or_else(|| {
+                        base.trim_end_matches(".jar")
+                            .trim_end_matches(".zip")
+                            .to_owned()
+                    }),
                     version_number: None,
                     sha1: None,
                     url: None,
@@ -536,6 +560,7 @@ pub fn list(instance: &Instance) -> Result<Vec<InstalledContent>> {
             });
         }
     }
+    icons.finish();
     out.sort_by_key(|a| a.entry.title.to_lowercase());
     Ok(out)
 }

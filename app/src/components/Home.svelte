@@ -2,7 +2,7 @@
   import { app, isActive } from "../lib/store.svelte";
   import { glowColor, materialFor, tileColor } from "../lib/theme";
   import { theme } from "../lib/dark.svelte";
-  import { duration, relative, date, bytes } from "../lib/format";
+  import { duration, relative, date, bytes, span } from "../lib/format";
   import { api, fileSrc, LOADER_NAMES, type Fix, type Overview } from "../lib/api";
   import { installProject } from "../lib/install.svelte";
   import Block from "./Block.svelte";
@@ -88,6 +88,8 @@
       case "check_mod": return `Review ${f.name}`;
       case "automatic_java": return "Use automatic Java";
       case "remove_duplicate": return "Open mods";
+      case "disable_mod": return `Turn off ${f.name}`;
+      case "undo_update": return "Undo the update";
       default: return null;
     }
   }
@@ -103,6 +105,22 @@
       case "install_mod":
         app.targetId = i.id;
         await installProject({ source: "modrinth", id: f.id, slug: f.id, title: f.name, summary: "", author: "", icon_url: null, downloads: 0, updated: null, kind: "mod", categories: [] });
+        break;
+      case "undo_update":
+        try {
+          await api.snapshotRestore(i.id, f.snapshot);
+          app.toast("Mods and settings are back to how they were. Press Play to try again.");
+        } catch (e) {
+          app.toast(String(e));
+        }
+        break;
+      case "disable_mod":
+        try {
+          await api.contentSetEnabled(i.id, f.file, false);
+          app.toast(`Turned off ${f.name}. Press Play to try again.`);
+        } catch (e) {
+          app.toast(String(e));
+        }
         break;
       case "check_mod":
       case "remove_duplicate":
@@ -142,6 +160,7 @@
     if (overview) {
       if (inst.loader !== "vanilla" && inst.loader !== "horizon") out.push({ label: "Mods", value: String(overview.mods) });
       out.push({ label: "Worlds", value: String(overview.worlds) }, { label: "On disk", value: bytes(overview.size) });
+      if (overview.startup_ms) out.push({ label: "Startup", value: span(overview.startup_ms), hint: "Time from pressing Play to the main menu, last time" });
     }
     return out;
   });

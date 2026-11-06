@@ -27,6 +27,13 @@ export function date(iso: string): string {
   return day.format(new Date(iso));
 }
 
+/** "48 sec", "1 min 12 sec": for short spans where seconds matter. */
+export function span(ms: number): string {
+  const secs = Math.round(ms / 1000);
+  if (secs < 60) return `${Math.max(secs, ms > 0 ? 1 : 0)} sec`;
+  return secs % 60 ? `${Math.floor(secs / 60)} min ${secs % 60} sec` : `${secs / 60} min`;
+}
+
 export function bytes(n: number): string {
   if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
   if (n < 1024 ** 3) return `${Math.round(n / 1024 ** 2)} MB`;

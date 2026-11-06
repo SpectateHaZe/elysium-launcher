@@ -3,6 +3,12 @@
   import { api, errorText } from "../lib/api";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import SkinFace from "./SkinFace.svelte";
+  import { duration } from "../lib/format";
+
+  // Time played across every instance (sessions run through the Minecraft Launcher aren't timed).
+  const total = $derived(app.instances.reduce((n, i) => n + i.playtime_secs, 0));
+  const played = $derived(app.instances.filter((i) => i.last_played).length);
+  const favourite = $derived(app.instances.reduce<(typeof app.instances)[number] | null>((best, i) => (i.playtime_secs > (best?.playtime_secs ?? 0) ? i : best), null));
 
   let skinBusy = $state(false);
 
@@ -60,6 +66,12 @@
   <p class="body-l muted intro">
     Signing in here is optional. {app.activeAccount ? "" : "Right now games open in the Minecraft Launcher, which signs you in. "}Offline accounts work in singleplayer and on servers that allow them.
   </p>
+
+  <dl class="group totals" aria-label="Your playtime">
+    <div><dt>Total playtime</dt><dd>{total ? duration(total) : "None yet"}</dd></div>
+    <div><dt>Instances played</dt><dd>{played} of {app.instances.length}</dd></div>
+    {#if favourite}<div class="fav"><dt>Most played</dt><dd title={favourite.name}>{favourite.name}</dd></div>{/if}
+  </dl>
 
   {#if app.accounts.accounts.length}
     <ul class="list group">
@@ -121,6 +133,11 @@
   .page { padding: 56px 40px 72px 8px; max-width: 780px; }
   .big { font-size: 56px; }
   .intro { margin: 10px 0 36px; max-width: 54ch; }
+  .totals { margin: 0 0 40px; padding: 18px 22px; display: flex; flex-wrap: wrap; gap: 16px 44px; }
+  .totals div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .totals .fav { flex: 1; }
+  .totals dt { font-size: 13px; line-height: 18px; color: var(--label-2); }
+  .totals dd { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .list { list-style: none; margin: 0 0 40px; padding: 4px 16px; }
   li { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--separator); }
   li:first-child { border-top: 0; }

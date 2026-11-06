@@ -2,6 +2,7 @@
 
 pub mod curseforge;
 pub mod install;
+pub mod local;
 pub mod modpack;
 pub mod modrinth;
 

@@ -28,6 +28,9 @@ pub mod progress;
 pub mod rules;
 pub mod secrets;
 pub mod settings;
+pub mod share;
+pub mod snapshot;
+pub mod startup;
 pub mod system;
 pub mod versions;
 
