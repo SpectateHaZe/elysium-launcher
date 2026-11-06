@@ -193,9 +193,10 @@ class AppState {
   }
 
   /** A click on an instance: select it and open its mods and packs (Horizon has none). */
+  /** First click selects an instance; clicking the selected one opens its mods. */
   open(i: Instance) {
-    this.selectedId = i.id;
-    if (i.loader !== "horizon") this.route = { name: "content", id: i.id };
+    if (this.selectedId !== i.id) this.selectedId = i.id;
+    else if (i.loader !== "horizon") this.route = { name: "content", id: i.id };
   }
 
   /** Opens a right-click menu at the pointer (or under the focused element). */

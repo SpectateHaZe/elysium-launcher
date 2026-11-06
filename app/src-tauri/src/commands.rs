@@ -298,7 +298,7 @@ pub fn save_game_options(
 }
 
 /// An instance's current options, to start the global ones from.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn game_options_from(
     state: State<'_, AppState>,
     id: String,
@@ -368,7 +368,7 @@ async fn adopt_icon(http: &Http, instances: &InstanceManager, id: &str, src: &st
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_instance(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     let mut sessions = lock(&state.sessions);
     if sessions.get(&id).is_some_and(|s| s.phase().is_active()) {
@@ -487,7 +487,7 @@ pub async fn instance_overview(
         .map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn startup_report(
     state: State<'_, AppState>,
     id: String,
@@ -496,7 +496,7 @@ pub fn startup_report(
     Ok(elysium_core::startup::history(&inst).pop())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn snapshot_take(
     state: State<'_, AppState>,
     id: String,
@@ -506,7 +506,7 @@ pub fn snapshot_take(
     elysium_core::snapshot::take(&inst, &label).map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn snapshot_pending(
     state: State<'_, AppState>,
     id: String,
@@ -515,7 +515,7 @@ pub fn snapshot_pending(
     Ok(elysium_core::snapshot::pending(&inst))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn snapshot_restore(state: State<'_, AppState>, id: String, snapshot: String) -> CmdResult<()> {
     if lock(&state.sessions)
         .get(&id)
@@ -1151,13 +1151,13 @@ pub fn import_pack_file(state: State<'_, AppState>, path: PathBuf) -> CmdResult<
     Ok(id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_pack(state: State<'_, AppState>, id: String, path: PathBuf) -> CmdResult<()> {
     let inst = state.instances.get(&id).map_err(err)?;
     modpack::export_mrpack(&inst, &path).map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn content_list(state: State<'_, AppState>, id: String) -> CmdResult<Vec<InstalledContent>> {
     content_install::list(&state.instances.get(&id).map_err(err)?).map_err(err)
 }
@@ -1187,7 +1187,7 @@ pub async fn content_updates(
     state.content().check_updates(&inst).await.map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn worlds(state: State<'_, AppState>, id: String) -> CmdResult<Vec<String>> {
     let saves = state
         .instances
@@ -1411,12 +1411,12 @@ pub async fn horizon_minecraft(state: State<'_, AppState>) -> CmdResult<String> 
 // ---------------------------------------------------------------------------
 // Import, backups, performance mods, system
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_scan() -> Vec<elysium_core::import::Foreign> {
     elysium_core::import::scan()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_scan_folder(path: PathBuf) -> Vec<elysium_core::import::Foreign> {
     // A picked folder may be any launcher's; try each format.
     use elysium_core::import::{ForeignSource, scan_root};
@@ -1514,7 +1514,7 @@ pub async fn share_files(
     .map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn backups(
     state: State<'_, AppState>,
     id: String,

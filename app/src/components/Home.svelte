@@ -3,7 +3,7 @@
   import { glowColor, materialFor, tileColor } from "../lib/theme";
   import { theme } from "../lib/dark.svelte";
   import { duration, relative, date, bytes, span } from "../lib/format";
-  import { api, fileSrc, LOADER_NAMES, type Fix, type Overview } from "../lib/api";
+  import { api, fileSrc, iconSrc, LOADER_NAMES, type Fix, type Overview } from "../lib/api";
   import { installProject } from "../lib/install.svelte";
   import Block from "./Block.svelte";
   import InstanceArt from "./InstanceArt.svelte";
@@ -279,9 +279,16 @@
           </figcaption>
         </figure>
       {/if}
-      <div class="art" class:picture={inst.icon} aria-hidden="true" in:fly={{ y: 24, duration: 520, easing: cubicOut }}>
-        <InstanceArt {inst} size={inst.icon ? 300 : 340} radius={56} />
-      </div>
+      {#if inst.icon}
+        <!-- The pack's own picture fills the card's right side and fades into it. -->
+        <div class="backdrop" aria-hidden="true" in:fade={{ duration: 520 }}>
+          <img src={iconSrc(inst)} alt="" onerror={(e) => ((e.currentTarget as HTMLElement).hidden = true)} />
+        </div>
+      {:else}
+        <div class="art" aria-hidden="true" in:fly={{ y: 24, duration: 520, easing: cubicOut }}>
+          <InstanceArt {inst} size={340} radius={56} />
+        </div>
+      {/if}
       {/key}
     </section>
   {:else}
@@ -440,7 +447,26 @@
     top: -84px;
     filter: drop-shadow(0 36px 32px rgb(0 0 0 / 0.25));
   }
-  .art.picture { right: 64px; top: -48px; }
+  .backdrop {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(46%, 620px);
+    border-radius: 0 32px 32px 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .backdrop img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top center;
+    display: block;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 55%), linear-gradient(to top, transparent, #000 30%);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(to right, transparent, #000 55%), linear-gradient(to top, transparent, #000 30%);
+    mask-composite: intersect;
+  }
+  .copy, .gallery { position: relative; z-index: 1; }
   @media (max-width: 1100px) {
     .hero { padding-right: 300px; }
     .art { right: 20px; top: -52px; transform: scale(0.72); transform-origin: top right; }
