@@ -2,7 +2,7 @@
   import { app } from "../lib/store.svelte";
   import { api, errorText, LOADER_NAMES, type Loader, type LoaderVersion, type PackImport, type VersionType } from "../lib/api";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
-  import { finishPackImport } from "../lib/install.svelte";
+  import { importPackFile } from "../lib/install.svelte";
   import { date } from "../lib/format";
   import { MATERIALS } from "../lib/theme";
   import MaterialPicker from "./MaterialPicker.svelte";
@@ -58,16 +58,8 @@
   });
 
   async function importPack() {
-    const path = await openDialog({ title: "Import a modpack", multiple: false, filters: [{ name: "Modpacks", extensions: ["mrpack", "zip"] }] });
-    if (typeof path !== "string") return;
     try {
-      const job = await api.importPackFile(path);
-      app.dialog = null;
-      app.watchJob(job, (j) => {
-        void app.dismissJob(j.id);
-        if (j.state.kind === "failed") app.toast(j.state.message);
-        else if (j.state.kind === "done") void finishPackImport(j.state.result as PackImport, "The pack");
-      });
+      await importPackFile();
     } catch (e) {
       error = errorText(e);
     }

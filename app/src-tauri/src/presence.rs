@@ -1,6 +1,5 @@
 //! Discord Rich Presence: what you're playing, or what you're doing in Elysium when no
-//! game is running. Needs a Discord application ID built in at release time; without
-//! one, or without Discord running, this quietly does nothing.
+//! game is running. Without Discord running, this quietly does nothing.
 
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -8,7 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use discord_rich_presence::activity::{Activity, Assets, Timestamps};
 use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
 
-const APP_ID: Option<&str> = option_env!("ELYSIUM_DISCORD_APP_ID");
+/// Elysium's Discord application (public, not a secret). A build can point at another.
+const APP_ID: Option<&str> = match option_env!("ELYSIUM_DISCORD_APP_ID") {
+    Some(id) => Some(id),
+    None => Some("1568200385967951902"),
+};
 
 #[derive(Default)]
 struct State {

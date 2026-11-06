@@ -3,6 +3,8 @@
   import { app } from "../lib/store.svelte";
   import { api, errorText, LOADER_NAMES, type Foreign } from "../lib/api";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { finishPackImport, importPackFile } from "../lib/install.svelte";
+  import type { PackImport } from "../lib/api";
 
   const SOURCE_NAMES = { prism: "Prism Launcher", multimc: "MultiMC", curseforge: "CurseForge", official: "Minecraft Launcher" } as const;
 
@@ -10,6 +12,21 @@
   let picked = $state<Set<string>>(new Set());
   let busy = $state(false);
   let linked = $state(false);
+  let code = $state("");
+
+  async function join() {
+    try {
+      const job = await api.syncJoin(code.trim());
+      app.dialog = null;
+      app.watchJob(job, (j) => {
+        void app.dismissJob(j.id);
+        if (j.state.kind === "failed") app.toast(j.state.message);
+        else if (j.state.kind === "done") void finishPackImport(j.state.result as PackImport, "The pack");
+      });
+    } catch (e) {
+      app.toast(errorText(e));
+    }
+  }
 
   const key = (f: Foreign) => `${f.source}:${f.game_dir}:${f.name}`;
 
@@ -69,6 +86,7 @@
 <div class="scrim" role="presentation" onclick={() => (app.dialog = null)}></div>
 <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="import-title">
   <h2 class="headline" id="import-title">Import instances</h2>
+  <p class="body-s muted">Have a CurseForge export or a .mrpack? Choose Modpack file.</p>
   <p class="body-m muted">
     {linked
       ? "Elysium uses the other launcher's folders directly. Worlds, mods and settings are shared, so a change in one launcher shows up in the other."
@@ -102,8 +120,20 @@
     </label>
   {/if}
 
+  <form class="group join" onsubmit={(e) => { e.preventDefault(); void join(); }}>
+    <span class="info">
+      <span class="title-m">Join a friend's pack</span>
+      <span class="body-s muted">Paste their share code. You'll get their changes each time you play.</span>
+    </span>
+    <span class="row">
+      <input class="code" bind:value={code} placeholder="Share code" spellcheck="false" autocomplete="off" />
+      <button class="btn tonal state" type="submit" disabled={!code.trim().startsWith("elysium-")}>Join</button>
+    </span>
+  </form>
+
   <div class="buttons">
     <button class="btn text state folder" onclick={chooseFolder}><span class="icon">folder_open</span>Choose folder</button>
+    <button class="btn text state" onclick={() => importPackFile().catch((e) => app.toast(errorText(e)))}><span class="icon">folder_zip</span>Modpack file</button>
     <button class="btn text state" onclick={() => (app.dialog = null)}>Cancel</button>
     <button class="btn filled state" disabled={busy || picked.size === 0} onclick={run}>Import{picked.size ? ` ${picked.size}` : ""}</button>
   </div>
@@ -127,6 +157,10 @@
   label { display: flex; align-items: center; gap: 14px; padding: 12px 0; cursor: pointer; }
   .info { display: flex; flex-direction: column; min-width: 0; }
   .share { justify-content: space-between; padding: 12px 16px; background: var(--bg); }
+  .join { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--bg); }
+  .join .row { display: flex; gap: 8px; }
+  .code { flex: 1; min-width: 0; height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--separator); background: var(--card); color: var(--label); font: inherit; }
+  .code:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .buttons { display: flex; justify-content: flex-end; gap: 8px; }
   .folder { margin-right: auto; }
 </style>

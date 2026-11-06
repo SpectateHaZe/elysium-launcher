@@ -113,7 +113,7 @@
   .dest.active .indicator { color: var(--bg); }
   .dest:focus-visible { outline: none; }
   .dest:focus-visible .indicator { outline: 3px solid var(--accent); outline-offset: 2px; }
-  .label { font-size: 11px; line-height: 14px; font-weight: 650; }
+  .label { font-size: 12px; line-height: 15px; font-weight: 650; }
   .dest.active .label { font-weight: 750; }
   .spacer { flex: 1; }
   .avatar {

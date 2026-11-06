@@ -99,13 +99,29 @@
 
   async function update(u: ContentUpdate) {
     const item = items.find((i) => i.entry.file === u.file);
-    // Save the working mods and configs first, so a bad update can be undone.
+    if (await restorePoint(`Updating ${item?.entry.title ?? u.latest.name}`)) start(u);
+  }
+
+  /** Updates everything listed, with one restore point covering all of it. */
+  async function updateAll() {
+    const all = updates ?? [];
+    if (!all.length || !(await restorePoint(`Updating ${all.length} item${all.length === 1 ? "" : "s"}`))) return;
+    for (const u of all) start(u);
+  }
+
+  // Save the working mods and configs first, so a bad update can be undone.
+  async function restorePoint(label: string) {
     try {
-      pending = await api.snapshotTake(id, `Updating ${item?.entry.title ?? u.latest.name}`);
+      pending = await api.snapshotTake(id, label);
+      return true;
     } catch (e) {
       app.toast(`Couldn't save a restore point, so nothing was updated. ${errorText(e)}`);
-      return;
+      return false;
     }
+  }
+
+  function start(u: ContentUpdate) {
+    const item = items.find((i) => i.entry.file === u.file);
     app.targetId = id;
     void installProject(
       {
@@ -179,12 +195,15 @@
 
   {#if updates && updates.length}
     <div class="updates group">
-      <p class="title-m">{updates.length} update{updates.length === 1 ? "" : "s"} available</p>
+      <div class="updates-head">
+        <p class="title-m">{updates.length} update{updates.length === 1 ? "" : "s"} available</p>
+        <button class="btn filled state" onclick={updateAll}>Update all</button>
+      </div>
       {#each updates as u (u.file)}
         {@const item = items.find((i) => i.entry.file === u.file)}
         <div class="update-row">
           <span class="body-m">{item?.entry.title ?? u.file}</span>
-          <span class="body-s muted">{u.current ?? "current"} to {u.latest.version_number}</span>
+          <span class="body-s muted">{u.current ? `${u.current} to ${u.latest.version_number}` : `New version ${u.latest.version_number}`}</span>
           <button class="btn text state" onclick={() => update(u)}>Update</button>
         </div>
       {/each}
@@ -224,7 +243,7 @@
 </div>
 
 <style>
-  .page { height: 100%; overflow-y: auto; padding: 32px 40px 64px 8px; max-width: 1000px; }
+  .page { height: 100%; overflow-y: auto; padding: 32px 40px 64px 8px; }
   header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
   .title { flex: 1; min-width: 0; margin-left: 4px; }
   .title h1 { font-size: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -235,6 +254,7 @@
   .startup ol li { display: grid; grid-template-columns: minmax(120px, 220px) 1fr 76px; align-items: center; gap: 12px; padding: 0; border: 0; }
   .startup .bar { height: 6px; border-radius: 3px; background: linear-gradient(var(--accent), var(--accent)) 0 0 / var(--w) 100% no-repeat, var(--fill); }
   .startup .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .updates-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; }
   .update-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--separator); }
   .update-row .body-m { flex: 1; }
   .list { list-style: none; margin: 20px 0 0; padding: 4px 16px; }

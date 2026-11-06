@@ -32,6 +32,7 @@ pub mod settings;
 pub mod share;
 pub mod snapshot;
 pub mod startup;
+pub mod sync;
 pub mod system;
 pub mod versions;
 

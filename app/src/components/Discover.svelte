@@ -213,7 +213,7 @@
 
 <style>
   .scroll { height: 100%; overflow-y: auto; }
-  .page { padding: 48px 40px 64px 8px; max-width: 1000px; }
+  .page { padding: 48px 40px 64px 8px; }
   .big { font-size: 56px; margin-bottom: 24px; }
   .toolbar { display: flex; gap: 16px; align-items: center; }
   .search.wide { flex: 1; height: 48px; border-radius: 14px; }

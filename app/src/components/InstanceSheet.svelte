@@ -8,6 +8,8 @@
   import type { Backup } from "../lib/api";
   import { date } from "../lib/format";
 
+  let { inst }: { inst: Instance } = $props();
+
   let backups = $state<Backup[]>([]);
   let backingUp = $state(false);
   let restoring = $state<Backup | null>(null);
@@ -50,13 +52,61 @@
       app.toast(errorText(e));
     }
   }
+  // Sharing: friends join with a code and get this instance's mods and configs.
+  let share = $state<{ code: string; opened: boolean; port: number } | null>(null);
+  let sharing = $state(false);
+  const synced = $derived(inst.pack?.source === "sync");
+
+  $effect(() => {
+    if (inst.shared && !share) void startShare();
+  });
+
+  async function startShare() {
+    sharing = true;
+    try {
+      share = await api.shareStart(inst.id);
+      if (!inst.shared) void app.refreshInstances();
+    } catch (e) {
+      app.toast(errorText(e));
+    } finally {
+      sharing = false;
+    }
+  }
+
+  async function stopShare() {
+    try {
+      await api.shareStop(inst.id);
+      share = null;
+      await app.refreshInstances();
+      app.toast("Stopped sharing. The old code no longer works.");
+    } catch (e) {
+      app.toast(errorText(e));
+    }
+  }
+
+  async function syncNow() {
+    try {
+      const job = await api.syncNow(inst.id);
+      app.watchJob(job, (j) => {
+        void app.dismissJob(j.id);
+        if (j.state.kind === "failed") app.toast(j.state.message);
+        else if (j.state.kind === "done") {
+          const r = j.state.result as { updated: number; removed: number };
+          void app.refreshInstances();
+          app.toast(r.updated + r.removed === 0 ? "Already up to date" : `Synced ${r.updated + r.removed} change${r.updated + r.removed === 1 ? "" : "s"}`);
+        }
+      });
+    } catch (e) {
+      app.toast(errorText(e));
+    }
+  }
+
   import MaterialPicker from "./MaterialPicker.svelte";
   import InstanceArt from "./InstanceArt.svelte";
   import MemoryFields from "./MemoryFields.svelte";
   import JavaField from "./JavaField.svelte";
   import Row from "./Row.svelte";
 
-  let { inst }: { inst: Instance } = $props();
 
   const running = $derived(isActive(app.sessions[inst.id]));
   const g = $derived(app.settings!);
@@ -202,6 +252,33 @@
       </Row>
       </div>
     </section>
+
+    {#if inst.loader !== "horizon"}
+      <section>
+        <h3 class="title-m">Play together</h3>
+        <div class="group">
+          {#if synced}
+            <Row title="Synced from {inst.pack?.name}" description="Gets the owner's mod and config changes each time you play. Mods you add yourself are kept.">
+              <button class="btn tonal state" disabled={running} onclick={syncNow}>Check now</button>
+            </Row>
+          {:else if !inst.shared && !share}
+            <Row title="Share with friends" description="Friends join with a code. Every change you make to mods and configs reaches them the next time they play.">
+              <button class="btn tonal state" disabled={sharing} onclick={startShare}>{sharing ? "Starting" : "Share"}</button>
+            </Row>
+          {:else}
+            <Row title="Share code" description={share ? "Friends paste this under Import, Join a friend's pack. Keep Elysium open so they can sync." : "Getting your share code"}>
+              <button class="btn tonal state" disabled={!share} onclick={() => share && navigator.clipboard.writeText(share.code).then(() => app.toast("Copied the share code"))}>Copy code</button>
+            </Row>
+            {#if share && !share.opened}
+              <Row title="Friends on other networks" description="Your router didn't open port {share.port} by itself. Forward TCP port {share.port} to this PC in your router's settings, or have everyone use Tailscale. Friends on your Wi-Fi can join already." />
+            {/if}
+            <Row title="Stop sharing" description="Friends keep what they have but stop getting changes">
+              <button class="btn text danger state" onclick={stopShare}>Stop</button>
+            </Row>
+          {/if}
+        </div>
+      </section>
+    {/if}
 
     <section>
       <h3 class="title-m">World backups</h3>

@@ -86,6 +86,22 @@ fn main() {
             std::fs::create_dir_all(&backgrounds)?;
             app.asset_protocol_scope()
                 .allow_directory(&backgrounds, false)?;
+            // Keep serving packs shared in an earlier session.
+            let state = app.state::<AppState>();
+            if state
+                .instances
+                .list()
+                .unwrap_or_default()
+                .iter()
+                .any(elysium_core::sync::is_shared)
+            {
+                let instances = state.instances.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = commands::ensure_sync_server(instances).await {
+                        tracing::warn!("couldn't start pack sharing: {e}");
+                    }
+                });
+            }
             Ok(())
         })
         .manage(state)
@@ -133,6 +149,10 @@ fn main() {
             commands::install_content,
             commands::install_pack,
             commands::import_pack_file,
+            commands::share_start,
+            commands::share_stop,
+            commands::sync_join,
+            commands::sync_now,
             commands::export_pack,
             commands::content_list,
             commands::content_set_enabled,

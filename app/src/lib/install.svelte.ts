@@ -1,5 +1,6 @@
 // Starting installs and reacting when they finish (shared by Discover and the sheet).
 import { app } from "./store.svelte";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, errorText, type ContentKind, type InstallReport, type PackImport, type ProjectHit } from "./api";
 
 function plural(n: number, word: string) {
@@ -81,6 +82,23 @@ export async function finishPackImport(r: PackImport, title: string) {
   app.route = { name: "home" };
   app.toast(`${title} is ready to play`);
   if (r.manual.length) app.manual = { instanceId: r.instance_id, items: r.manual };
+}
+
+/** Imports a .mrpack or CurseForge export zip, from a picker when no path is given. Throws if starting fails. */
+export async function importPackFile(path?: string) {
+  if (!path) {
+    const picked = await openDialog({ title: "Import a modpack", multiple: false, filters: [{ name: "Modpacks", extensions: ["mrpack", "zip"] }] });
+    if (typeof picked !== "string") return false;
+    path = picked;
+  }
+  const job = await api.importPackFile(path);
+  app.dialog = null;
+  app.watchJob(job, (j) => {
+    void app.dismissJob(j.id);
+    if (j.state.kind === "failed") app.toast(j.state.message);
+    else if (j.state.kind === "done") void finishPackImport(j.state.result as PackImport, "The pack");
+  });
+  return true;
 }
 
 export function key(hit: { source: string; id: string }) {

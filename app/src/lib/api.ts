@@ -111,6 +111,8 @@ export interface Instance {
   linked_launcher: string | null;
   icon: string | null;
   icon_version: number;
+  /** Friends can join this instance with a share code. */
+  shared: boolean;
 }
 
 export interface Overview {
@@ -433,6 +435,10 @@ export const api = {
     invoke<number>("install_pack", { request: { source, project_id: projectId, version_id: versionId, title, icon_url: iconUrl } }),
   importPackFile: (path: string) => invoke<number>("import_pack_file", { path }),
   exportPack: (id: string, path: string) => invoke<void>("export_pack", { id, path }),
+  shareStart: (id: string) => invoke<{ code: string; opened: boolean; port: number }>("share_start", { id }),
+  shareStop: (id: string) => invoke<void>("share_stop", { id }),
+  syncJoin: (code: string) => invoke<number>("sync_join", { code }),
+  syncNow: (id: string) => invoke<number>("sync_now", { id }),
   contentList: (id: string) => invoke<InstalledContent[]>("content_list", { id }),
   contentSetEnabled: (id: string, file: string, enabled: boolean) => invoke<void>("content_set_enabled", { id, file, enabled }),
   contentRemove: (id: string, file: string) => invoke<void>("content_remove", { id, file }),

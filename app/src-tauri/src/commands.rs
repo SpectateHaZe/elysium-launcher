@@ -162,11 +162,14 @@ pub struct InstanceView {
     pub icon: Option<PathBuf>,
     /// Changes whenever the picture does, so the UI can bust its cache.
     pub icon_version: u64,
+    /// Friends can join this instance with a share code.
+    pub shared: bool,
 }
 
 impl From<Instance> for InstanceView {
     fn from(i: Instance) -> Self {
         let icon = i.icon_path();
+        let shared = elysium_core::sync::is_shared(&i);
         let linked_launcher = elysium_core::instance::linked_home(&i.config).map(|h| h.launcher);
         let icon_version = icon
             .as_ref()
@@ -189,6 +192,7 @@ impl From<Instance> for InstanceView {
             overrides: i.config.overrides,
             linked_dir: i.config.linked_dir,
             linked_launcher,
+            shared,
         }
     }
 }
@@ -696,6 +700,44 @@ pub async fn launch(
             format!("Preparing {what}"),
         ));
 
+        // A friend's pack: pick up the owner's changes first. If the owner's PC can't
+        // be reached, play the version already here.
+        if elysium_core::sync::is_synced(&instance) {
+            let concurrency = settings.concurrent_downloads.clamp(1, 64);
+            match elysium_core::sync::sync(
+                &http,
+                &instances,
+                &instance.id,
+                concurrency,
+                Arc::clone(&progress),
+            )
+            .await
+            {
+                Ok(r) if r.updated + r.removed > 0 => push(LogLine::launcher(
+                    LogLevel::Info,
+                    format!(
+                        "Synced the pack: {} file(s) updated, {} removed",
+                        r.updated, r.removed
+                    ),
+                )),
+                Ok(_) => {}
+                Err(elysium_core::Error::Cancelled) => {
+                    push(LogLine::launcher(LogLevel::Warn, "Launch cancelled"));
+                    set_phase(Phase::Stopped);
+                    notify(&app);
+                    return;
+                }
+                Err(e) => push(LogLine::launcher(
+                    LogLevel::Warn,
+                    format!("Couldn't sync the pack, playing the version you have: {e}"),
+                )),
+            }
+        }
+        // The sync may have changed the game or loader version.
+        let instance = instances
+            .get(&instance.id)
+            .unwrap_or_else(|_| instance.clone());
+
         if settings.auto_backup {
             progress.set_stage("Backing up worlds", 0);
             let inst = instance.clone();
@@ -1184,6 +1226,93 @@ pub fn import_pack_file(state: State<'_, AppState>, path: PathBuf) -> CmdResult<
         jobs::finish(&job, r);
     });
     Ok(id)
+}
+
+static SERVING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Starts the pack sync server once, the first time anything is shared.
+pub async fn ensure_sync_server(instances: InstanceManager) -> CmdResult<()> {
+    use std::sync::atomic::Ordering;
+    if SERVING.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    elysium_core::sync::serve(instances, elysium_core::sync::PORT)
+        .await
+        .map(|_| ())
+        .map_err(|e| {
+            SERVING.store(false, Ordering::SeqCst);
+            err(e)
+        })
+}
+
+#[derive(Debug, Serialize)]
+pub struct ShareView {
+    pub code: String,
+    /// Whether the router opened the port, so friends outside your network can join.
+    pub opened: bool,
+    pub port: u16,
+}
+
+#[tauri::command]
+pub async fn share_start(state: State<'_, AppState>, id: String) -> CmdResult<ShareView> {
+    let inst = state.instances.get(&id).map_err(err)?;
+    let token = elysium_core::sync::start_sharing(&inst).map_err(err)?;
+    ensure_sync_server(state.instances.clone()).await?;
+    let reach = elysium_core::sync::reach(&state.http).await;
+    let code = elysium_core::sync::ShareCode {
+        addrs: reach.addrs,
+        token,
+        name: inst.config.name.clone(),
+    };
+    Ok(ShareView {
+        code: code.encode(),
+        opened: reach.opened,
+        port: elysium_core::sync::PORT,
+    })
+}
+
+#[tauri::command]
+pub fn share_stop(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    elysium_core::sync::stop_sharing(&state.instances.get(&id).map_err(err)?).map_err(err)
+}
+
+/// Joins a friend's shared pack as a new instance.
+#[tauri::command]
+pub fn sync_join(state: State<'_, AppState>, code: String) -> CmdResult<u64> {
+    elysium_core::sync::ShareCode::decode(&code).map_err(err)?;
+    let (http, instances, paths) = (
+        state.http.clone(),
+        state.instances.clone(),
+        state.paths.clone(),
+    );
+    let concurrency = lock(&state.settings).concurrent_downloads.clamp(1, 64);
+    let (id, progress, job) = state.jobs.start("Joining a shared pack".to_owned());
+    tauri::async_runtime::spawn(async move {
+        let r = elysium_core::sync::join(&http, &instances, &code, concurrency, progress)
+            .await
+            .map(|instance_id| {
+                seed_options(&paths, &instances, &instance_id);
+                modpack::PackImport {
+                    instance_id,
+                    manual: Vec::new(),
+                }
+            });
+        jobs::finish(&job, r);
+    });
+    Ok(id)
+}
+
+/// Pulls the owner's latest changes into a synced instance.
+#[tauri::command]
+pub fn sync_now(state: State<'_, AppState>, id: String) -> CmdResult<u64> {
+    let (http, instances) = (state.http.clone(), state.instances.clone());
+    let concurrency = lock(&state.settings).concurrent_downloads.clamp(1, 64);
+    let (job_id, progress, job) = state.jobs.start("Syncing pack".to_owned());
+    tauri::async_runtime::spawn(async move {
+        let r = elysium_core::sync::sync(&http, &instances, &id, concurrency, progress).await;
+        jobs::finish(&job, r);
+    });
+    Ok(job_id)
 }
 
 #[tauri::command(async)]

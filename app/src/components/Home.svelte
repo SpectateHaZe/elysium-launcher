@@ -187,7 +187,7 @@
 
 <div class="home">
   {#if inst}
-    <section class="hero" aria-label={inst.name} style:--glow={glowColor(material, theme.dark)} oncontextmenu={(e) => app.openMenu(e, app.instanceMenu(inst))}>
+    <section class="hero" class:raised={!inst.icon} aria-label={inst.name} style:--glow={glowColor(material, theme.dark)} oncontextmenu={(e) => app.openMenu(e, app.instanceMenu(inst))}>
       {#key inst.id}
       <div class="copy" in:fly={{ y: 14, duration: 420, easing: cubicOut }}>
         <p class="version">
@@ -233,14 +233,14 @@
               <span class="icon filled">play_arrow</span>Play
             </button>
           {/if}
-          <button class="icon-btn lg tonal state" title="Instance settings" aria-label="Instance settings" onclick={() => (app.sheetOpen = true)}>
-            <span class="icon">tune</span>
-          </button>
           {#if inst.loader !== "horizon"}
-            <button class="icon-btn lg tonal state" title="Mods and packs" aria-label="Mods and packs" onclick={() => (app.route = { name: "content", id: inst.id })}>
-              <span class="icon">extension</span>
+            <button class="btn lg tonal state" onclick={() => (app.route = { name: "content", id: inst.id })}>
+              <span class="icon">extension</span>Mods
             </button>
           {/if}
+          <button class="btn lg tonal state" onclick={() => (app.sheetOpen = true)}>
+            <span class="icon">tune</span>Settings
+          </button>
           <button class="icon-btn lg tonal state" title="Game log" aria-label="Game log" onclick={() => (app.route = { name: "logs", id: inst.id })}>
             <span class="icon">terminal</span>
           </button>
@@ -281,6 +281,9 @@
       {/if}
       {#if inst.icon}
         <!-- The pack's own picture fills the card's right side and fades into it. -->
+        <div class="wash" aria-hidden="true" in:fade={{ duration: 700 }}>
+          <img src={iconSrc(inst)} alt="" onerror={(e) => ((e.currentTarget as HTMLElement).hidden = true)} />
+        </div>
         <div class="backdrop" aria-hidden="true" in:fade={{ duration: 520 }}>
           <img src={iconSrc(inst)} alt="" onerror={(e) => ((e.currentTarget as HTMLElement).hidden = true)} />
         </div>
@@ -340,7 +343,7 @@
             {@const m = materialFor(i.material, i.name)}
             {@const selected = inst?.id === i.id}
             {@const running = isActive(app.sessions[i.id])}
-            <li animate:flip={{ duration: 300, easing: cubicOut }} in:fly={{ y: 16, duration: 380, delay: Math.min(n, 12) * 28, easing: cubicOut }}>
+            <li class="cell" animate:flip={{ duration: 300, easing: cubicOut }} in:fly={{ y: 16, duration: 380, delay: Math.min(n, 12) * 28, easing: cubicOut }}>
               <button
                 class="tile"
                 class:selected
@@ -353,10 +356,23 @@
                 <span class="swatch state" style:background={tileColor(m, theme.dark)}>
                   <InstanceArt inst={i} size={84} fill radius={28} />
                   {#if running}<span class="live">Playing</span>{/if}
+                  {#if i.pack?.source === "sync"}
+                    <span class="badge" title="Synced from {i.pack.name}"><span class="icon">sync</span></span>
+                  {:else if i.shared}
+                    <span class="badge" title="Shared with friends"><span class="icon">group</span></span>
+                  {/if}
                 </span>
                 <span class="name title-m">{i.name}</span>
                 <span class="meta body-m muted">{loaderText(i)}</span>
               </button>
+              {#if !running}
+                <!-- Over the picture, but its own button: buttons can't nest. -->
+                <span class="over">
+                  <button class="quick state" title="Play {i.name}" aria-label="Play {i.name}" onclick={() => app.play(i.id)}>
+                    <span class="icon filled">play_arrow</span>
+                  </button>
+                </span>
+              {/if}
             </li>
           {/each}
         </ul>
@@ -408,7 +424,7 @@
      rising out of the top edge like a product shot. */
   .hero {
     position: relative;
-    margin-top: 92px;
+    margin-top: 24px;
     padding: 64px 440px 56px 64px;
     min-height: 400px;
     border-radius: 32px;
@@ -417,7 +433,11 @@
       var(--card);
     box-shadow: var(--shadow-card);
   }
+  .hero.raised { margin-top: 92px; }
+  /* With a picture there's no block on the right, so the copy may use the space. */
+  .hero:not(.raised) { padding-right: 64px; }
   .copy { max-width: 680px; display: flex; flex-direction: column; }
+  .btn.lg { height: 48px; padding: 0 22px 0 18px; font-size: 16px; font-weight: 650; gap: 8px; }
   .version {
     margin: 0 0 14px;
     font-size: 19px;
@@ -447,10 +467,27 @@
     top: -84px;
     filter: drop-shadow(0 36px 32px rgb(0 0 0 / 0.25));
   }
+  .wash {
+    position: absolute;
+    inset: 0;
+    border-radius: 32px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .wash img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(48px) saturate(1.4);
+    opacity: 0.32;
+    transform: scale(1.2);
+    -webkit-mask-image: linear-gradient(to right, transparent 10%, #000 70%);
+    mask-image: linear-gradient(to right, transparent 10%, #000 70%);
+  }
   .backdrop {
     position: absolute;
     inset: 0 0 0 auto;
-    width: min(46%, 620px);
+    width: min(52%, 820px);
     border-radius: 0 32px 32px 0;
     overflow: hidden;
     pointer-events: none;
@@ -540,7 +577,8 @@
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(156px, 184px));
+    /* Tiles stretch so each row reaches both edges. */
+    grid-template-columns: repeat(auto-fill, minmax(164px, 1fr));
     gap: 32px 24px;
   }
   .tile {
@@ -607,6 +645,45 @@
     background: #34c759;
     animation: pulse 1.6s ease-in-out infinite;
   }
+  .badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: rgb(0 0 0 / 0.5);
+    backdrop-filter: blur(8px);
+  }
+  .badge .icon { font-size: 17px; }
+  .cell { position: relative; }
+  .over { position: absolute; inset: 0 0 auto 0; aspect-ratio: 1; pointer-events: none; }
+  .quick {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    width: 48px;
+    height: 48px;
+    border: 0;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: var(--on-accent);
+    background: var(--accent);
+    box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
+    cursor: pointer;
+    pointer-events: auto;
+    opacity: 0;
+    translate: 0 8px;
+    transition: opacity 180ms var(--ease), translate 420ms var(--spring), transform 420ms var(--spring);
+  }
+  .quick .icon { font-size: 28px; }
+  .cell:hover .quick, .quick:focus-visible { opacity: 1; translate: 0 -6px; }
+  .quick:hover { transform: scale(1.08); }
+  @media (prefers-reduced-motion: reduce) { .quick { transition: opacity 180ms linear; translate: none; } .cell:hover .quick { translate: none; } }
   .live.inline { position: relative; top: auto; right: auto; margin-left: 4px; flex: none; }
   @keyframes pulse { 50% { opacity: 0.35; } }
 

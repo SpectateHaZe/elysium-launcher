@@ -265,7 +265,7 @@
 
 <style>
   .scroll { height: 100%; overflow-y: auto; }
-  .page { padding: 56px 40px 72px 8px; max-width: 780px; }
+  .page { padding: 56px 40px 72px 8px; max-width: 1280px; }
   .big { font-size: 56px; }
   .intro { margin: 10px 0 8px; max-width: 54ch; }
   section { padding-top: 36px; }
