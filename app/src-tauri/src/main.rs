@@ -100,6 +100,8 @@ fn main() {
             commands::create_instance,
             commands::update_instance,
             commands::set_instance_icon,
+            commands::instance_overview,
+            commands::open_screenshot,
             commands::clear_instance_icon,
             commands::delete_instance,
             commands::save_settings,

@@ -22,6 +22,7 @@ pub mod loaders;
 pub mod logs;
 pub mod meta;
 pub mod official;
+pub mod overview;
 pub mod paths;
 pub mod progress;
 pub mod rules;

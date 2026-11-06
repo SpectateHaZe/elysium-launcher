@@ -27,6 +27,12 @@ export function date(iso: string): string {
   return day.format(new Date(iso));
 }
 
+export function bytes(n: number): string {
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
+  if (n < 1024 ** 3) return `${Math.round(n / 1024 ** 2)} MB`;
+  return `${(n / 1024 ** 3).toFixed(1)} GB`;
+}
+
 export function memory(mb: number): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(mb % 1024 === 0 ? 0 : 1)} GB` : `${mb} MB`;
 }

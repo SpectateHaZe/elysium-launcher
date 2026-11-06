@@ -411,6 +411,44 @@ pub fn open_folder(
 }
 
 #[tauri::command]
+pub async fn instance_overview(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<elysium_core::overview::Overview> {
+    let inst = state.instances.get(&id).map_err(err)?;
+    // A linked instance's screenshots live in the other launcher's folder; let the window
+    // show that one folder, not anything around it.
+    let shots = inst.game_dir().join("screenshots");
+    if shots.is_dir() {
+        app.asset_protocol_scope()
+            .allow_directory(&shots, false)
+            .map_err(err)?;
+    }
+    tokio::task::spawn_blocking(move || elysium_core::overview::overview(&inst))
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn open_screenshot(state: State<'_, AppState>, id: String, name: String) -> CmdResult<()> {
+    if name.is_empty() || name.contains(['/', '\\']) || name.starts_with('.') {
+        return Err("Not a screenshot".into());
+    }
+    let path = state
+        .instances
+        .get(&id)
+        .map_err(err)?
+        .game_dir()
+        .join("screenshots")
+        .join(&name);
+    if !path.is_file() {
+        return Err("That screenshot is gone".into());
+    }
+    open::that_detached(&path).map_err(|e| format!("Couldn't open {name}: {e}"))
+}
+
+#[tauri::command]
 pub fn sessions(state: State<'_, AppState>) -> std::collections::HashMap<String, SessionView> {
     lock(&state.sessions)
         .iter()

@@ -104,6 +104,18 @@ export interface Instance {
   icon_version: number;
 }
 
+export interface Overview {
+  mods: number;
+  worlds: number;
+  size: number;
+  screenshots: { path: string; taken: number }[];
+}
+
+/** URL for a local image the window is allowed to read. */
+export function fileSrc(path: string): string {
+  return convertFileSrc(path);
+}
+
 /** URL for an instance's picture, or null when it uses its block. */
 export function iconSrc(i: Pick<Instance, "icon" | "icon_version">): string | null {
   return i.icon ? `${convertFileSrc(i.icon)}?v=${i.icon_version}` : null;
@@ -359,6 +371,8 @@ export const api = {
     invoke<Instance>("update_instance", { id, name, material, overrides }),
   setInstanceIcon: (id: string, path: string) => invoke<Instance>("set_instance_icon", { id, path }),
   clearInstanceIcon: (id: string) => invoke<Instance>("clear_instance_icon", { id }),
+  instanceOverview: (id: string) => invoke<Overview>("instance_overview", { id }),
+  openScreenshot: (id: string, name: string) => invoke<void>("open_screenshot", { id, name }),
   deleteInstance: (id: string) => invoke<void>("delete_instance", { id }),
   saveSettings: (settings: Settings) => invoke<Settings>("save_settings", { settings }),
   addOfflineAccount: (username: string) => invoke<AccountStore>("add_offline_account", { username }),

@@ -2,8 +2,8 @@
   import { app, isActive } from "../lib/store.svelte";
   import { glowColor, materialFor, tileColor } from "../lib/theme";
   import { theme } from "../lib/dark.svelte";
-  import { duration, relative, date } from "../lib/format";
-  import { api, LOADER_NAMES, type Fix } from "../lib/api";
+  import { duration, relative, date, bytes } from "../lib/format";
+  import { api, fileSrc, LOADER_NAMES, type Fix, type Overview } from "../lib/api";
   import { installProject } from "../lib/install.svelte";
   import Block from "./Block.svelte";
   import InstanceArt from "./InstanceArt.svelte";
@@ -116,9 +116,53 @@
     }
   }
 
+  // Stats and screenshots: refetched when the selection changes and when a session ends.
+  let overview = $state<Overview | null>(null);
+  $effect(() => {
+    const id = inst?.id;
+    void phase;
+    if (!id) return;
+    let live = true;
+    api.instanceOverview(id).then((o) => live && (overview = o)).catch(() => live && (overview = null));
+    return () => { live = false; };
+  });
+
+  const stats = $derived.by(() => {
+    if (!inst) return [];
+    const played = inst.playtime_secs
+      ? { value: duration(inst.playtime_secs) }
+      : inst.last_played
+        ? { value: "Not timed", hint: "Time isn't counted when the game runs through the Minecraft Launcher" }
+        : { value: "Not yet" };
+    const last = inst.last_played ? relative(inst.last_played) : "Never";
+    const out: { label: string; value: string; hint?: string }[] = [
+      { label: "Played", ...played },
+      { label: "Last played", value: last.charAt(0).toUpperCase() + last.slice(1) },
+    ];
+    if (overview) {
+      if (inst.loader !== "vanilla" && inst.loader !== "horizon") out.push({ label: "Mods", value: String(overview.mods) });
+      out.push({ label: "Worlds", value: String(overview.worlds) }, { label: "On disk", value: bytes(overview.size) });
+    }
+    return out;
+  });
+
+  const shots = $derived(overview?.screenshots ?? []);
+  let shot = $state(0);
+  const current = $derived(shots[shot % Math.max(1, shots.length)]);
+  $effect(() => {
+    void inst?.id;
+    shot = 0;
+  });
+  function step(d: number) {
+    shot = (shot + d + shots.length) % shots.length;
+  }
+
+  function shotName(path: string): string {
+    return path.split(/[\\/]/).pop() ?? path;
+  }
+
   function summary(i: NonNullable<typeof inst>): string {
-    if (!i.last_played) return `Not played yet. Created ${date(i.created)}.`;
-    return `Played ${duration(i.playtime_secs)} in total, most recently ${relative(i.last_played)}.`;
+    return i.last_played ? `Created ${date(i.created)}.` : `Not played yet. Created ${date(i.created)}.`;
   }
 </script>
 
@@ -185,7 +229,37 @@
             <span class="icon">folder_open</span>
           </button>
         </div>
+
+        <dl class="stats">
+          {#each stats as s (s.label)}
+            <div title={s.hint}>
+              <dt>{s.label}</dt>
+              <dd>{s.value}</dd>
+            </div>
+          {/each}
+        </dl>
       </div>
+      {#if current}
+        {@const s = current}
+        {@const name = shotName(s.path)}
+        <figure class="gallery" aria-label="Screenshots" in:fade={{ duration: 300 }}>
+          <div class="frame">
+            {#key s.path}
+              <button class="pic" title="Open {name}" aria-label="Open {name}" in:fade={{ duration: 220 }} onclick={() => api.openScreenshot(inst.id, name).catch((e) => app.toast(String(e)))}>
+                <img src={fileSrc(s.path)} alt="" decoding="async" />
+              </button>
+            {/key}
+            {#if shots.length > 1}
+              <button class="nav prev icon-btn state" title="Previous screenshot" aria-label="Previous screenshot" onclick={() => step(-1)}><span class="icon">chevron_left</span></button>
+              <button class="nav next icon-btn state" title="Next screenshot" aria-label="Next screenshot" onclick={() => step(1)}><span class="icon">chevron_right</span></button>
+            {/if}
+          </div>
+          <figcaption>
+            <span>{relative(new Date(s.taken).toISOString()).replace(/^./, (c) => c.toUpperCase())}</span>
+            {#if shots.length > 1}<span class="muted">{(shot % shots.length) + 1} of {shots.length}</span>{/if}
+          </figcaption>
+        </figure>
+      {/if}
       <div class="art" class:picture={inst.icon} aria-hidden="true" in:fly={{ y: 24, duration: 520, easing: cubicOut }}>
         <InstanceArt {inst} size={inst.icon ? 300 : 340} radius={56} />
       </div>
@@ -353,6 +427,64 @@
   @media (max-width: 1100px) {
     .hero { padding-right: 300px; }
     .art { right: 20px; top: -52px; transform: scale(0.72); transform-origin: top right; }
+  }
+
+  .stats {
+    margin: 40px 0 0;
+    padding-top: 22px;
+    border-top: 1px solid var(--separator);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 40px;
+  }
+  .stats div { display: flex; flex-direction: column; gap: 2px; }
+  .stats dt { font-size: 13px; line-height: 18px; color: var(--label-2); }
+  .stats dd { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; }
+  .stats div[title] { cursor: help; }
+
+  /* Hero layout: copy on the left, the screenshot viewer filling the middle. */
+  .hero { display: flex; align-items: center; gap: 56px; }
+  .copy { flex: none; }
+  .gallery { flex: 1 1 0; min-width: 0; max-width: 780px; margin: -24px auto; display: flex; flex-direction: column; gap: 10px; }
+  .frame {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    padding: 6px;
+    border-radius: 24px;
+    background: color-mix(in srgb, var(--label) 8%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--label) 10%, transparent), 0 24px 48px rgb(0 0 0 / 0.28);
+  }
+  .pic {
+    appearance: none;
+    border: 0;
+    padding: 0;
+    position: absolute;
+    inset: 6px;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #000;
+    cursor: zoom-in;
+  }
+  .pic img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .frame:hover .pic img { transform: scale(1.025); }
+  .nav {
+    position: absolute;
+    top: 50%;
+    translate: 0 -50%;
+    background: rgb(0 0 0 / 0.45);
+    color: #fff;
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .prev { left: 16px; }
+  .next { right: 16px; }
+  .frame:hover .nav, .nav:focus-visible { opacity: 1; }
+  figcaption { display: flex; justify-content: space-between; padding: 0 10px; font-size: 13px; line-height: 18px; color: var(--label-2); }
+  /* Too narrow for both side by side: the viewer moves under the stats. */
+  @media (max-width: 1500px) {
+    .hero { flex-wrap: wrap; }
+    .gallery { flex-basis: 100%; max-width: 560px; margin: 0; }
   }
 
   .library { margin-top: 64px; }
