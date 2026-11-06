@@ -9,6 +9,8 @@ class Updater {
   error = $state<string | null>(null);
 
   async check() {
+    // A dev build is newer than any release but numbered 0.1.0; it must not "update" itself.
+    if (import.meta.env.DEV) return;
     try {
       this.available = await check();
     } catch (e) {

@@ -76,6 +76,12 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            // Instance pictures are the only local files the window may load.
+            let dir = app.state::<AppState>().paths.instances_dir();
+            app.asset_protocol_scope().allow_directory(&dir, true)?;
+            Ok(())
+        })
         .manage(state)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -93,6 +99,8 @@ fn main() {
             commands::versions,
             commands::create_instance,
             commands::update_instance,
+            commands::set_instance_icon,
+            commands::clear_instance_icon,
             commands::delete_instance,
             commands::save_settings,
             commands::add_offline_account,

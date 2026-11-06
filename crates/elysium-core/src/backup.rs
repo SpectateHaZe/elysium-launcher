@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Local, TimeZone};
 use serde::Serialize;
 
+use crate::Progress;
 use crate::error::{Error, IoContext, Result};
 use crate::instance::Instance;
 
@@ -41,15 +42,27 @@ pub fn worlds(instance: &Instance) -> Vec<String> {
     out
 }
 
-fn zip_dir(src: &Path, out: &Path) -> Result<()> {
+fn zip_dir(src: &Path, out: &Path, progress: &Progress) -> Result<()> {
     if let Some(p) = out.parent() {
         std::fs::create_dir_all(p).at(p)?;
     }
     let tmp = out.with_extension("partial");
-    let file = std::fs::File::create(&tmp).at(&tmp)?;
+    let r = write_zip(src, &tmp, out, progress);
+    if r.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    r?;
+    std::fs::rename(&tmp, out).at(out)
+}
+
+fn write_zip(src: &Path, tmp: &Path, out: &Path, progress: &Progress) -> Result<()> {
+    let file = std::fs::File::create(tmp).at(tmp)?;
     let mut zip = zip::ZipWriter::new(file);
-    let opts = zip::write::SimpleFileOptions::default()
+    let deflate = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
+    // Region files are already compressed chunk by chunk; deflating them again costs
+    // most of the backup time and saves almost nothing.
+    let store = deflate.compression_method(zip::CompressionMethod::Stored);
     let zerr = |e| Error::Zip {
         path: out.to_owned(),
         source: e,
@@ -66,6 +79,12 @@ fn zip_dir(src: &Path, out: &Path) -> Result<()> {
             if path.is_dir() {
                 stack.push(path);
             } else if rel != "session.lock" {
+                progress.check()?;
+                let opts = if rel.ends_with(".mca") {
+                    store
+                } else {
+                    deflate
+                };
                 zip.start_file(rel, opts).map_err(zerr)?;
                 let mut data = Vec::new();
                 std::fs::File::open(&path)
@@ -76,11 +95,17 @@ fn zip_dir(src: &Path, out: &Path) -> Result<()> {
         }
     }
     zip.finish().map_err(zerr)?;
-    std::fs::rename(&tmp, out).at(out)
+    Ok(())
 }
 
-/// Backs up one world and keeps only the newest `keep` backups of it.
-pub fn backup_world(instance: &Instance, world: &str, keep: u32) -> Result<Backup> {
+/// Backs up one world and keeps only the newest `keep` backups of it. Stops with
+/// `Error::Cancelled` (leaving no partial file) when `progress` is cancelled.
+pub fn backup_world(
+    instance: &Instance,
+    world: &str,
+    keep: u32,
+    progress: &Progress,
+) -> Result<Backup> {
     let world = check_name(world)?;
     let src = instance.game_dir().join("saves").join(world);
     if !src.join("level.dat").exists() {
@@ -99,7 +124,7 @@ pub fn backup_world(instance: &Instance, world: &str, keep: u32) -> Result<Backu
             .join(world)
             .join(format!("{stamp}_{n}.zip"));
     }
-    zip_dir(&src, &out)?;
+    zip_dir(&src, &out, progress)?;
     prune(instance, world, keep)?;
     Ok(Backup {
         world: world.to_owned(),
@@ -160,17 +185,24 @@ pub fn list(instance: &Instance) -> Result<Vec<Backup>> {
 }
 
 /// Backs up every world whose newest backup is older than a day (or missing).
-pub fn auto_backup(instance: &Instance, keep: u32) -> Result<Vec<Backup>> {
+pub fn auto_backup(instance: &Instance, keep: u32, progress: &Progress) -> Result<Vec<Backup>> {
     let existing = list(instance)?;
+    let due: Vec<String> = worlds(instance)
+        .into_iter()
+        .filter(|world| {
+            !existing
+                .iter()
+                .find(|b| &b.world == world)
+                .is_some_and(|b| Local::now() - b.created < chrono::Duration::hours(24))
+        })
+        .collect();
     let mut made = Vec::new();
-    for world in worlds(instance) {
-        let recent = existing
-            .iter()
-            .find(|b| b.world == world)
-            .is_some_and(|b| Local::now() - b.created < chrono::Duration::hours(24));
-        if !recent {
-            made.push(backup_world(instance, &world, keep)?);
-        }
+    for (n, world) in due.iter().enumerate() {
+        progress.set_stage(
+            format!("Backing up {world} ({} of {})", n + 1, due.len()),
+            0,
+        );
+        made.push(backup_world(instance, world, keep, progress)?);
     }
     Ok(made)
 }
@@ -184,7 +216,7 @@ pub fn restore(instance: &Instance, world: &str, file: &str, keep: u32) -> Resul
     }
     let dest = instance.game_dir().join("saves").join(world);
     if dest.join("level.dat").exists() {
-        backup_world(instance, world, keep.saturating_add(1))?;
+        backup_world(instance, world, keep.saturating_add(1), &Progress::new())?;
         std::fs::remove_dir_all(&dest).at(&dest)?;
     }
     let mut archive =
@@ -217,8 +249,19 @@ mod tests {
         std::fs::write(world.join("region/r.0.0.mca"), b"chunks").unwrap();
         std::fs::write(world.join("session.lock"), b"lock").unwrap();
 
-        assert_eq!(auto_backup(&inst, 5).unwrap().len(), 1);
-        assert!(auto_backup(&inst, 5).unwrap().is_empty(), "only once a day");
+        let cancelled = Progress::new();
+        cancelled.cancel();
+        assert!(matches!(
+            auto_backup(&inst, 5, &cancelled),
+            Err(Error::Cancelled)
+        ));
+        assert!(list(&inst).unwrap().is_empty(), "no partial backup left");
+        let p = Progress::new();
+        assert_eq!(auto_backup(&inst, 5, &p).unwrap().len(), 1);
+        assert!(
+            auto_backup(&inst, 5, &p).unwrap().is_empty(),
+            "only once a day"
+        );
         let first = list(&inst).unwrap().remove(0);
 
         std::fs::write(world.join("level.dat"), b"v2").unwrap();

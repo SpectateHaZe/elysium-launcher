@@ -2,7 +2,7 @@
 <script lang="ts">
   import { app } from "../lib/store.svelte";
   import { theme } from "../lib/dark.svelte";
-  import { ACCENTS, PALETTES, accentColor, customPalette, paletteFor, type Palette } from "../lib/theme";
+  import { ACCENTS, GRADIENTS, PALETTES, accentColor, backdrop, customPalette, paletteFor, type Palette } from "../lib/theme";
   import { isHex } from "../lib/color";
   import type { Appearance, TextSize, ThemePref } from "../lib/api";
   import Row from "./Row.svelte";
@@ -29,13 +29,19 @@
 
   // Native colour pickers fire `input` continuously; save at most every 120 ms.
   let pending: ReturnType<typeof setTimeout> | null = null;
-  function setColor(key: "custom_accent" | "custom_tint", value: string, extra: Partial<Appearance> = {}) {
+  function setColor(key: "custom_accent" | "custom_tint" | "gradient_from" | "gradient_to", value: string, extra: Partial<Appearance> = {}) {
     if (!isHex(value)) return;
     if (pending) clearTimeout(pending);
     pending = setTimeout(() => setAppearance({ [key]: value.toLowerCase(), ...extra }), 120);
   }
 
   const themeAccent = $derived(accentColor({ ...a, accent: "palette" }, dark));
+  const bg = $derived(paletteFor(a)[dark ? "dark" : "light"].bg);
+  const gradients = $derived([
+    { id: "none", name: "None", colors: null },
+    ...GRADIENTS.map((g) => ({ id: g.id, name: g.name, colors: [g.from, g.to] as [string, string] })),
+    { id: "custom", name: "Custom", colors: [a.gradient_from, a.gradient_to] as [string, string] },
+  ]);
 </script>
 
 <Row title="Mode">
@@ -84,6 +90,30 @@
     </label>
   </Row>
 {/if}
+
+<div class="block">
+  <p class="title-m">Background</p>
+  <div class="themes" role="radiogroup" aria-label="Background gradient">
+    {#each gradients as g (g.id)}
+      {@const selected = a.gradient === g.id}
+      <button class="theme" role="radio" aria-checked={selected} onclick={() => setAppearance({ gradient: g.id })}>
+        <span class="preview" class:selected style:background-color={bg} style:background-image={backdrop(g.colors, bg, dark)}></span>
+        <span class="name" class:selected>{g.name}</span>
+      </button>
+    {/each}
+  </div>
+  {#if a.gradient === "custom"}
+    <div class="gradient-colors">
+      {#each [["gradient_from", "Start color"], ["gradient_to", "End color"]] as const as [key, label] (key)}
+        <label class="color-field">
+          <span class="dot" style:background={a[key]}></span>
+          <input type="color" value={a[key]} aria-label={label} oninput={(e) => setColor(key, e.currentTarget.value)} />
+          <span class="hex">{label}</span>
+        </label>
+      {/each}
+    </div>
+  {/if}
+</div>
 
 <div class="block">
   <p class="title-m">Accent color</p>
@@ -236,4 +266,5 @@
   }
   .dot { width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12); }
   .hex { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .gradient-colors { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
 </style>

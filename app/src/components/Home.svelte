@@ -6,10 +6,42 @@
   import { api, LOADER_NAMES, type Fix } from "../lib/api";
   import { installProject } from "../lib/install.svelte";
   import Block from "./Block.svelte";
+  import InstanceArt from "./InstanceArt.svelte";
   import WavyProgress from "./WavyProgress.svelte";
+  import { fade, fly } from "svelte/transition";
+  import { flip } from "svelte/animate";
+  import { cubicOut } from "svelte/easing";
 
   let query = $state("");
   let now = $state(Date.now());
+
+  // Grid or list; remembered on this computer only.
+  const VIEW_KEY = "elysium.libraryView";
+  let view = $state<"grid" | "list">(readView());
+  function readView(): "grid" | "list" {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
+    } catch {
+      return "grid";
+    }
+  }
+  function setView(v: "grid" | "list") {
+    view = v;
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // Storage unavailable: the choice lasts until restart.
+    }
+  }
+
+  function loaderText(i: (typeof app.instances)[number]): string {
+    return i.loader === "horizon" ? "Horizon" : i.loader === "vanilla" ? `Minecraft ${i.game_version}` : `${i.game_version}, ${LOADER_NAMES[i.loader]}`;
+  }
+
+  // Shift+F10 and the menu key open the right-click menu from the keyboard.
+  function menuKey(e: KeyboardEvent, i: (typeof app.instances)[number]) {
+    if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) app.openMenu(e, app.instanceMenu(i));
+  }
 
   const inst = $derived(app.selected);
   const material = $derived(materialFor(inst?.material, inst?.name));
@@ -92,8 +124,9 @@
 
 <div class="home">
   {#if inst}
-    <section class="hero" aria-label={inst.name} style:--glow={glowColor(material, theme.dark)}>
-      <div class="copy">
+    <section class="hero" aria-label={inst.name} style:--glow={glowColor(material, theme.dark)} oncontextmenu={(e) => app.openMenu(e, app.instanceMenu(inst))}>
+      {#key inst.id}
+      <div class="copy" in:fly={{ y: 14, duration: 420, easing: cubicOut }}>
         <p class="version">
           {#if inst.loader === "horizon"}Horizon, Minecraft {inst.game_version} in Rust{:else}Minecraft {inst.game_version}{inst.loader !== "vanilla" ? ` with ${LOADER_NAMES[inst.loader]}` : ""}{/if}
         </p>
@@ -153,9 +186,10 @@
           </button>
         </div>
       </div>
-      <div class="art" aria-hidden="true">
-        <Block {material} key={inst.id} size={340} />
+      <div class="art" class:picture={inst.icon} aria-hidden="true" in:fly={{ y: 24, duration: 520, easing: cubicOut }}>
+        <InstanceArt {inst} size={inst.icon ? 300 : 340} radius={56} />
       </div>
+      {/key}
     </section>
   {:else}
     <section class="hero empty" style:--glow={glowColor(materialFor("grass"), theme.dark)}>
@@ -177,7 +211,11 @@
   {#if app.instances.length > 0}
     <section class="library" aria-labelledby="library-title">
       <header>
-        <h2 class="headline" id="library-title">Instances</h2>
+        <h2 class="headline" id="library-title">Instances <span class="count">{app.instances.length}</span></h2>
+        <div class="segmented" role="group" aria-label="Show instances as">
+          <button class="state" aria-pressed={view === "grid"} title="Grid" aria-label="Grid" onclick={() => setView("grid")}><span class="icon">grid_view</span></button>
+          <button class="state" aria-pressed={view === "list"} title="List" aria-label="List" onclick={() => setView("list")}><span class="icon">view_list</span></button>
+        </div>
         {#if app.instances.length > 8}
           <label class="search">
             <span class="icon">search</span>
@@ -196,29 +234,67 @@
       {#if visible.length === 0}
         <p class="body-l muted">No instances match “{query.trim()}”.</p>
       {/if}
-      <ul class="grid">
-        {#each visible as i (i.id)}
-          {@const m = materialFor(i.material, i.name)}
-          {@const selected = inst?.id === i.id}
-          {@const running = isActive(app.sessions[i.id])}
-          <li>
+      {#if view === "grid"}
+        <ul class="grid" in:fade={{ duration: 200 }}>
+          {#each visible as i, n (i.id)}
+            {@const m = materialFor(i.material, i.name)}
+            {@const selected = inst?.id === i.id}
+            {@const running = isActive(app.sessions[i.id])}
+            <li animate:flip={{ duration: 300, easing: cubicOut }} in:fly={{ y: 16, duration: 380, delay: Math.min(n, 12) * 28, easing: cubicOut }}>
+              <button
+                class="tile"
+                class:selected
+                aria-pressed={selected}
+                title={i.name}
+                onclick={() => app.select(i.id)}
+                ondblclick={() => app.play(i.id)}
+                oncontextmenu={(e) => app.openMenu(e, app.instanceMenu(i))}
+                onkeydown={(e) => menuKey(e, i)}
+              >
+                <span class="swatch state" style:background={tileColor(m, theme.dark)}>
+                  <InstanceArt inst={i} size={84} fill radius={28} />
+                  {#if running}<span class="live">Playing</span>{/if}
+                </span>
+                <span class="name title-m">{i.name}</span>
+                <span class="meta body-m muted">{loaderText(i)}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <div class="table group" role="group" aria-label="Instances" in:fade={{ duration: 200 }}>
+          <div class="row head" aria-hidden="true">
+            <span class="c-name">Name</span>
+            <span>Version</span>
+            <span>Last played</span>
+            <span class="c-num">Playtime</span>
+          </div>
+          {#each visible as i, n (i.id)}
+            {@const selected = inst?.id === i.id}
+            {@const running = isActive(app.sessions[i.id])}
             <button
-              class="tile"
+              class="row"
               class:selected
-              aria-pressed={selected}
+              aria-current={selected ? "true" : undefined}
+              animate:flip={{ duration: 300, easing: cubicOut }}
+              in:fly={{ y: 8, duration: 300, delay: Math.min(n, 16) * 18, easing: cubicOut }}
               onclick={() => app.select(i.id)}
               ondblclick={() => app.play(i.id)}
+              oncontextmenu={(e) => app.openMenu(e, app.instanceMenu(i))}
+              onkeydown={(e) => menuKey(e, i)}
             >
-              <span class="swatch state" style:background={tileColor(m, theme.dark)}>
-                <Block material={m} key={i.id} size={84} />
-                {#if running}<span class="live" title="Running"></span>{/if}
+              <span class="c-name">
+                <span class="thumb" style:background={tileColor(materialFor(i.material, i.name), theme.dark)}><InstanceArt inst={i} size={30} fill radius={10} /></span>
+                <span class="full">{i.name}</span>
+                {#if running}<span class="live inline">Playing</span>{/if}
               </span>
-              <span class="name title-m">{i.name}</span>
-              <span class="meta body-m muted">{i.loader === "horizon" ? "Horizon" : i.loader === "vanilla" ? `Minecraft ${i.game_version}` : `${i.game_version}, ${LOADER_NAMES[i.loader]}`}</span>
+              <span class="muted">{loaderText(i)}</span>
+              <span class="muted">{i.last_played ? relative(i.last_played) : "Never"}</span>
+              <span class="muted c-num">{i.playtime_secs ? duration(i.playtime_secs) : "None"}</span>
             </button>
-          </li>
-        {/each}
-      </ul>
+          {/each}
+        </div>
+      {/if}
     </section>
   {/if}
 </div>
@@ -273,6 +349,7 @@
     top: -84px;
     filter: drop-shadow(0 36px 32px rgb(0 0 0 / 0.25));
   }
+  .art.picture { right: 64px; top: -48px; }
   @media (max-width: 1100px) {
     .hero { padding-right: 300px; }
     .art { right: 20px; top: -52px; transform: scale(0.72); transform-origin: top right; }
@@ -312,21 +389,81 @@
     place-items: center;
     border-radius: 28px;
     margin-bottom: 14px;
-    transition: transform 250ms var(--ease), box-shadow 200ms linear, filter 150ms linear;
+    box-shadow: var(--shadow-card);
+    transition: transform 350ms var(--ease), box-shadow 250ms var(--ease), filter 150ms linear;
   }
-  .tile:hover .swatch { transform: scale(1.02); }
-  .tile.selected .swatch { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--label); }
+  .tile:hover .swatch { transform: translateY(-4px); box-shadow: 0 14px 30px rgb(0 0 0 / 0.14); }
+  .tile.selected .swatch { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--accent); }
   .tile:focus-visible { outline: none; }
   .tile:focus-visible .swatch { outline: 3px solid var(--accent); outline-offset: 6px; }
-  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  /* Two lines before cutting off; the full name is in the tooltip and the list view. */
+  .name {
+    font-weight: 700;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    transition: color 200ms linear;
+  }
+  .tile.selected .name { color: var(--accent); }
   .live {
     position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 10px;
-    height: 10px;
+    top: 12px;
+    right: 12px;
+    padding: 2px 9px 2px 20px;
+    border-radius: var(--shape-full);
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 700;
+    color: #fff;
+    background: rgb(0 0 0 / 0.55);
+    backdrop-filter: blur(8px);
+  }
+  .live::before {
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 6px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #34c759;
-    box-shadow: 0 0 0 3px color-mix(in srgb, #34c759 30%, transparent);
+    animation: pulse 1.6s ease-in-out infinite;
   }
+  .live.inline { position: relative; top: auto; right: auto; margin-left: 4px; flex: none; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  .count { color: var(--label-3); font-variant-numeric: tabular-nums; }
+  header .segmented button { padding: 0 10px; }
+
+  /* List view: full names in columns. */
+  .table { padding: 6px 8px; display: flex; flex-direction: column; }
+  .row {
+    appearance: none;
+    border: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    background: none;
+    display: grid;
+    grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.3fr) minmax(0, 1fr) 110px;
+    align-items: center;
+    gap: 16px;
+    min-height: 52px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 150ms linear;
+  }
+  .row:not(.head):hover { background: var(--fill); }
+  .row.selected { background: var(--accent-soft); }
+  .row.selected .full { color: var(--accent); }
+  .row.head { min-height: 32px; cursor: default; font-size: 13px; font-weight: 600; color: var(--label-3); }
+  .c-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .full { font-weight: 650; overflow-wrap: anywhere; }
+  .c-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .thumb { position: relative; flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; overflow: hidden; }
 </style>

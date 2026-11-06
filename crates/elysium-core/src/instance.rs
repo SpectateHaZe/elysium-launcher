@@ -94,6 +94,10 @@ pub struct InstanceConfig {
     pub material: Option<String>,
     #[serde(default)]
     pub overrides: InstanceOverrides,
+    /// Another launcher's game folder this instance shares instead of its own copy.
+    /// Deleting the instance leaves that folder alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,11 +120,23 @@ pub struct Instance {
 impl Instance {
     /// The game directory (`.minecraft`) of this instance.
     pub fn game_dir(&self) -> PathBuf {
-        self.dir.join(".minecraft")
+        match &self.config.linked_dir {
+            Some(dir) => dir.clone(),
+            None => self.dir.join(".minecraft"),
+        }
     }
 
     pub fn natives_dir(&self) -> PathBuf {
         self.dir.join("natives")
+    }
+
+    /// The instance's picture (`icon.png`, `icon.jpg`, …), if it has one. Kept in the
+    /// Elysium folder even for linked instances, so the other launcher's folder is untouched.
+    pub fn icon_path(&self) -> Option<PathBuf> {
+        ICON_KINDS
+            .iter()
+            .map(|(_, ext)| self.dir.join(format!("icon.{ext}")))
+            .find(|p| p.is_file())
     }
 
     /// The version JSON id to launch: the loader profile once installed, else vanilla.
@@ -237,6 +253,7 @@ impl InstanceManager {
                 playtime_secs: 0,
                 material: None,
                 overrides: InstanceOverrides::default(),
+                linked_dir: None,
             },
             id,
             dir,
@@ -268,7 +285,33 @@ impl InstanceManager {
         })
     }
 
-    /// Permanently deletes the instance folder, including worlds.
+    /// Sets the instance's picture. The format comes from the bytes, not a file name, and
+    /// anything that isn't a PNG, JPEG, GIF or WebP image under 8 MB is refused.
+    pub fn set_icon(&self, id: &str, bytes: &[u8]) -> Result<Instance> {
+        let instance = self.get(id)?;
+        if bytes.len() > MAX_ICON_BYTES {
+            return Err(Error::Invalid("That image is larger than 8 MB".into()));
+        }
+        let ext = ICON_KINDS
+            .iter()
+            .find(|(magic, _)| magic(bytes))
+            .map(|(_, ext)| *ext)
+            .ok_or_else(|| Error::Invalid("Use a PNG, JPEG, GIF or WebP image".into()))?;
+        let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        remove_icons(&instance)?;
+        fsutil::write_atomic(&instance.dir.join(format!("icon.{ext}")), bytes)?;
+        Ok(instance)
+    }
+
+    pub fn clear_icon(&self, id: &str) -> Result<Instance> {
+        let instance = self.get(id)?;
+        let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        remove_icons(&instance)?;
+        Ok(instance)
+    }
+
+    /// Permanently deletes the instance folder, including worlds. A linked instance's
+    /// game folder lives elsewhere and is kept.
     pub fn delete(&self, id: &str) -> Result<()> {
         let dir = self.dir_for(id)?;
         if !dir.join(CONFIG_FILE).exists() {
@@ -284,6 +327,35 @@ impl InstanceManager {
         }
         Ok(self.root.join(id))
     }
+}
+
+const MAX_ICON_BYTES: usize = 8 * 1024 * 1024;
+
+type Magic = fn(&[u8]) -> bool;
+
+/// Image formats an instance picture may use, recognised by their first bytes.
+const ICON_KINDS: &[(Magic, &str)] = &[
+    (|b| b.starts_with(b"\x89PNG\r\n\x1a\n"), "png"),
+    (|b| b.starts_with(&[0xff, 0xd8, 0xff]), "jpg"),
+    (
+        |b| b.starts_with(b"GIF87a") || b.starts_with(b"GIF89a"),
+        "gif",
+    ),
+    (
+        |b| b.len() > 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP",
+        "webp",
+    ),
+];
+
+fn remove_icons(instance: &Instance) -> Result<()> {
+    for (_, ext) in ICON_KINDS {
+        let p = instance.dir.join(format!("icon.{ext}"));
+        match std::fs::remove_file(&p) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e).at(&p),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// Makes a display name safe as a folder name on every OS.
@@ -312,6 +384,27 @@ fn sanitize_dir_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn icons_by_content_replace_and_clear() {
+        let dir = tempfile::tempdir().unwrap();
+        let mgr = InstanceManager::new(dir.path());
+        let inst = mgr.create("Pack", "1.21.1").unwrap();
+        assert!(inst.icon_path().is_none());
+        assert!(mgr.set_icon(&inst.id, b"<svg>not allowed</svg>").is_err());
+        mgr.set_icon(&inst.id, b"\x89PNG\r\n\x1a\nrest").unwrap();
+        assert!(inst.icon_path().unwrap().ends_with("icon.png"));
+        // A new picture in another format replaces the old one.
+        mgr.set_icon(&inst.id, &[0xff, 0xd8, 0xff, 0xe0]).unwrap();
+        assert!(inst.icon_path().unwrap().ends_with("icon.jpg"));
+        assert!(!inst.dir.join("icon.png").exists());
+        mgr.clear_icon(&inst.id).unwrap();
+        assert!(inst.icon_path().is_none());
+        assert!(
+            mgr.set_icon(&inst.id, &vec![0x89; MAX_ICON_BYTES + 1])
+                .is_err()
+        );
+    }
 
     #[test]
     fn sanitizes_names() {

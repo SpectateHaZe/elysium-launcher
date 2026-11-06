@@ -21,6 +21,55 @@
   import Onboarding from "./components/Onboarding.svelte";
   import ImportDialog from "./components/ImportDialog.svelte";
   import { updater } from "./lib/updater.svelte";
+  import ContextMenu from "./components/ContextMenu.svelte";
+  import { fly } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
+
+  const routeKey = $derived("id" in app.route ? `${app.route.name}:${app.route.id}` : app.route.name);
+  import type { MenuItem } from "./lib/store.svelte";
+
+  type Editable = HTMLInputElement | HTMLTextAreaElement;
+
+  function editable(t: EventTarget | null): Editable | null {
+    if (t instanceof HTMLTextAreaElement) return t;
+    if (t instanceof HTMLInputElement && ["text", "search", "url", "email", "number", "password", ""].includes(t.type)) return t;
+    return null;
+  }
+
+  // Replaces the browser's menu everywhere. Components with their own menu handle the
+  // event first; here, text fields get editing commands and selected text gets Copy.
+  function oncontextmenu(e: MouseEvent) {
+    if (e.defaultPrevented) return;
+    e.preventDefault();
+    const field = editable(e.target);
+    const items: MenuItem[] = [];
+    if (field) {
+      const [start, end] = [field.selectionStart ?? 0, field.selectionEnd ?? 0];
+      const selected = field.value.slice(start, end);
+      const writable = !field.readOnly && !field.disabled;
+      const put = (text: string) => {
+        field.focus();
+        field.setRangeText(text, field.selectionStart ?? start, field.selectionEnd ?? end, "end");
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      items.push(
+        { label: "Cut", icon: "content_cut", disabled: !selected || !writable || field.type === "password", run: () => void navigator.clipboard.writeText(selected).then(() => put("")) },
+        { label: "Copy", icon: "content_copy", disabled: !selected || field.type === "password", run: () => void navigator.clipboard.writeText(selected) },
+        {
+          label: "Paste",
+          icon: "content_paste",
+          disabled: !writable,
+          run: () => void navigator.clipboard.readText().then(put).catch(() => app.toast("Couldn't read the clipboard. Press Ctrl+V instead.")),
+        },
+        "separator",
+        { label: "Select all", icon: "select_all", run: () => { field.focus(); field.select(); } },
+      );
+    } else {
+      const text = window.getSelection()?.toString() ?? "";
+      if (text) items.push({ label: "Copy", icon: "content_copy", run: () => void navigator.clipboard.writeText(text) });
+    }
+    if (items.length) app.menu = { x: e.clientX, y: e.clientY, items };
+  }
 
   void app.init();
   // Look for a new release shortly after start, without slowing the first paint.
@@ -40,6 +89,8 @@
   );
 </script>
 
+<svelte:window {oncontextmenu} />
+
 {#if app.fatal}
   <main class="fatal">
     <h1 class="headline">Elysium couldn't start</h1>
@@ -49,6 +100,8 @@
   <div class="shell">
     <Rail />
     <main>
+      {#key routeKey}
+      <div class="page" in:fly={{ y: 10, duration: 360, easing: cubicOut }}>
       {#if app.route.name === "home"}
         <Home />
       {:else if app.route.name === "logs"}
@@ -62,6 +115,8 @@
       {:else if app.route.name === "settings"}
         <Settings />
       {/if}
+      </div>
+      {/key}
     </main>
   </div>
 
@@ -88,7 +143,9 @@
   {:else if deleting}
     <ConfirmDialog
       title="Delete {deleting.name}?"
-      body="This removes the instance folder, including its worlds, screenshots and settings. You can't undo this."
+      body={deleting.linked_dir
+        ? "This removes the instance from Elysium. Its worlds, mods and settings stay in the other launcher's folder."
+        : "This removes the instance folder, including its worlds, screenshots and settings. You can't undo this."}
       confirm="Delete"
       danger
       onconfirm={() => {
@@ -104,10 +161,12 @@
   <JobsTray />
   <UpdateBanner />
   <Snackbar />
+  <ContextMenu />
 {/if}
 
 <style>
   .shell { display: flex; height: 100%; }
   main { flex: 1; min-width: 0; height: 100%; }
+  .page { height: 100%; }
   .fatal { padding: 64px; max-width: 640px; }
 </style>

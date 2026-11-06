@@ -1,0 +1,2 @@
+# Signed and hashed test data must keep its exact bytes.
+crates/elysium-core/tests/fixtures/** -text

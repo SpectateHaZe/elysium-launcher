@@ -70,7 +70,8 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: var(--backdrop, none);
   color: var(--label);
   font-family: var(--font);
   font-size: 15px;

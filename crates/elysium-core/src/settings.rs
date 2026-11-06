@@ -48,17 +48,25 @@ pub struct Appearance {
     pub custom_tint: String,
     pub text_size: TextSize,
     pub reduce_transparency: bool,
+    /// Window background gradient: `none`, a preset id, or `custom`.
+    pub gradient: String,
+    /// `#rrggbb` start and end of the custom gradient.
+    pub gradient_from: String,
+    pub gradient_to: String,
 }
 
 impl Default for Appearance {
     fn default() -> Self {
         Self {
-            palette: "default".into(),
+            palette: "graphite".into(),
             accent: "palette".into(),
             custom_accent: "#007aff".into(),
             custom_tint: "#5e5ce6".into(),
             text_size: TextSize::Default,
             reduce_transparency: false,
+            gradient: "none".into(),
+            gradient_from: "#5e5ce6".into(),
+            gradient_to: "#ff2d55".into(),
         }
     }
 }
@@ -73,8 +81,19 @@ impl Appearance {
         if !is_hex_color(&self.custom_tint) {
             self.custom_tint = defaults.custom_tint;
         }
+        if !is_hex_color(&self.gradient_from) {
+            self.gradient_from = defaults.gradient_from;
+        }
+        if !is_hex_color(&self.gradient_to) {
+            self.gradient_to = defaults.gradient_to;
+        }
+        if self.gradient.is_empty() {
+            self.gradient = defaults.gradient;
+        }
         self.custom_accent.make_ascii_lowercase();
         self.custom_tint.make_ascii_lowercase();
+        self.gradient_from.make_ascii_lowercase();
+        self.gradient_to.make_ascii_lowercase();
         if self.palette.is_empty() {
             self.palette = defaults.palette;
         }
@@ -141,7 +160,7 @@ impl Default for Settings {
             onboarded: false,
             always_official_launcher: false,
             optimized_java_flags: true,
-            auto_backup: true,
+            auto_backup: false,
             backups_kept: 5,
             discord_presence: true,
         }
@@ -307,12 +326,14 @@ mod tests {
             custom_accent: "red".into(),
             custom_tint: "#ABCDEF".into(),
             palette: String::new(),
+            gradient_to: "blue".into(),
             ..Default::default()
         };
         a.sanitize();
         assert_eq!(a.custom_accent, "#007aff");
         assert_eq!(a.custom_tint, "#abcdef");
-        assert_eq!(a.palette, "default");
+        assert_eq!(a.palette, "graphite");
+        assert_eq!(a.gradient_to, "#ff2d55");
         assert!(is_hex_color("#00ff7A"));
         assert!(!is_hex_color("#00ff7"));
         assert!(!is_hex_color("00ff7a0"));

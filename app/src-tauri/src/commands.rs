@@ -155,11 +155,24 @@ pub struct InstanceView {
     pub last_played: Option<DateTime<Utc>>,
     pub playtime_secs: u64,
     pub overrides: InstanceOverrides,
+    pub linked_dir: Option<PathBuf>,
+    /// The instance's picture, served to the UI over the asset protocol.
+    pub icon: Option<PathBuf>,
+    /// Changes whenever the picture does, so the UI can bust its cache.
+    pub icon_version: u64,
 }
 
 impl From<Instance> for InstanceView {
     fn from(i: Instance) -> Self {
+        let icon = i.icon_path();
+        let icon_version = icon
+            .as_ref()
+            .and_then(|p| std::fs::metadata(p).ok()?.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_millis() as u64);
         Self {
+            icon,
+            icon_version,
             id: i.id,
             name: i.config.name,
             game_version: i.config.game_version,
@@ -171,6 +184,7 @@ impl From<Instance> for InstanceView {
             last_played: i.config.last_played,
             playtime_secs: i.config.playtime_secs,
             overrides: i.config.overrides,
+            linked_dir: i.config.linked_dir,
         }
     }
 }
@@ -264,6 +278,37 @@ pub fn update_instance(
         })
         .map(Into::into)
         .map_err(err)
+}
+
+#[tauri::command]
+pub fn set_instance_icon(
+    state: State<'_, AppState>,
+    id: String,
+    path: PathBuf,
+) -> CmdResult<InstanceView> {
+    let bytes = std::fs::read(&path).map_err(|e| format!("Couldn't read that image: {e}"))?;
+    state
+        .instances
+        .set_icon(&id, &bytes)
+        .map(Into::into)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn clear_instance_icon(state: State<'_, AppState>, id: String) -> CmdResult<InstanceView> {
+    state.instances.clear_icon(&id).map(Into::into).map_err(err)
+}
+
+/// Gives a new instance the picture its source had; a missing picture isn't an error.
+async fn adopt_icon(http: &Http, instances: &InstanceManager, id: &str, src: &str) {
+    let r = async {
+        let bytes = elysium_core::import::icon_bytes(http, src).await?;
+        instances.set_icon(id, &bytes)
+    }
+    .await;
+    if let Err(e) = r {
+        tracing::warn!("couldn't bring over the picture for {id}: {e}");
+    }
 }
 
 #[tauri::command]
@@ -485,8 +530,9 @@ pub async fn launch(
             progress.set_stage("Backing up worlds", 0);
             let inst = instance.clone();
             let keep = settings.backups_kept;
+            let p = Arc::clone(&progress);
             match tokio::task::spawn_blocking(move || {
-                elysium_core::backup::auto_backup(&inst, keep)
+                elysium_core::backup::auto_backup(&inst, keep, &p)
             })
             .await
             {
@@ -494,6 +540,12 @@ pub async fn launch(
                     LogLevel::Info,
                     format!("Backed up {} world(s)", made.len()),
                 )),
+                Ok(Err(elysium_core::Error::Cancelled)) => {
+                    push(LogLine::launcher(LogLevel::Warn, "Launch cancelled"));
+                    set_phase(Phase::Stopped);
+                    notify(&app);
+                    return;
+                }
                 Ok(Err(e)) => push(LogLine::launcher(
                     LogLevel::Warn,
                     format!("Couldn't back up worlds: {e}"),
@@ -807,6 +859,9 @@ pub struct PackRequest {
     pub project_id: String,
     pub version_id: String,
     pub title: String,
+    /// The project's icon, given to the new instance as its picture.
+    #[serde(default)]
+    pub icon_url: Option<String>,
 }
 
 #[tauri::command]
@@ -843,6 +898,15 @@ pub fn install_pack(state: State<'_, AppState>, request: PackRequest) -> CmdResu
             }
         }
         .await;
+        if let (Ok(pack), Some(url)) = (
+            &r,
+            request
+                .icon_url
+                .as_deref()
+                .filter(|u| u.starts_with("https://")),
+        ) {
+            adopt_icon(&http, &instances, &pack.instance_id, url).await;
+        }
         jobs::finish(&job, r);
     });
     Ok(id)
@@ -1159,36 +1223,53 @@ pub fn import_scan_folder(path: PathBuf) -> Vec<elysium_core::import::Foreign> {
 pub fn import_run(
     state: State<'_, AppState>,
     items: Vec<elysium_core::import::Foreign>,
+    linked: bool,
 ) -> CmdResult<u64> {
     let instances = state.instances.clone();
+    let http = state.http.clone();
     let (id, progress, job) = state.jobs.start(format!(
         "Importing {} instance{}",
         items.len(),
         if items.len() == 1 { "" } else { "s" }
     ));
     tauri::async_runtime::spawn(async move {
-        let r = tokio::task::spawn_blocking(move || {
-            let mut ok = Vec::new();
-            let mut failed = Vec::new();
-            for (n, f) in items.iter().enumerate() {
-                progress.set_stage(
-                    format!("Copying {} ({} of {})", f.name, n + 1, items.len()),
-                    0,
-                );
-                if progress.is_cancelled() {
-                    break;
-                }
-                match elysium_core::import::import(&instances, f) {
-                    Ok(inst) => ok.push(inst.id),
-                    Err(e) => failed.push(format!("{}: {e}", f.name)),
-                }
+        let mut ok = Vec::new();
+        let mut failed = Vec::new();
+        let total = items.len();
+        for (n, f) in items.into_iter().enumerate() {
+            if progress.is_cancelled() {
+                break;
             }
-            Ok::<_, elysium_core::Error>(serde_json::json!({ "imported": ok, "failed": failed }))
-        })
-        .await
-        .map_err(|e| elysium_core::Error::Invalid(e.to_string()))
-        .and_then(|r| r);
-        jobs::finish(&job, r);
+            progress.set_stage(
+                format!(
+                    "{} {} ({} of {total})",
+                    if linked { "Linking" } else { "Copying" },
+                    f.name,
+                    n + 1,
+                ),
+                0,
+            );
+            let (mgr, foreign) = (instances.clone(), f.clone());
+            let r = tokio::task::spawn_blocking(move || {
+                elysium_core::import::import(&mgr, &foreign, linked)
+            })
+            .await
+            .map_err(|e| elysium_core::Error::Invalid(e.to_string()))
+            .and_then(|r| r);
+            match r {
+                Ok(inst) => {
+                    if let Some(src) = &f.icon {
+                        adopt_icon(&http, &instances, &inst.id, src).await;
+                    }
+                    ok.push(inst.id);
+                }
+                Err(e) => failed.push(format!("{}: {e}", f.name)),
+            }
+        }
+        jobs::finish(
+            &job,
+            Ok::<_, elysium_core::Error>(serde_json::json!({ "imported": ok, "failed": failed })),
+        );
     });
     Ok(id)
 }
@@ -1211,7 +1292,7 @@ pub async fn backup_now(state: State<'_, AppState>, id: String) -> CmdResult<usi
     tokio::task::spawn_blocking(move || {
         let worlds = elysium_core::backup::worlds(&inst);
         for w in &worlds {
-            elysium_core::backup::backup_world(&inst, w, keep)?;
+            elysium_core::backup::backup_world(&inst, w, keep, &elysium_core::Progress::new())?;
         }
         Ok::<_, elysium_core::Error>(worlds.len())
     })

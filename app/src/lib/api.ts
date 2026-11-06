@@ -1,5 +1,5 @@
 // Typed wrappers around the Tauri commands in src-tauri/src/commands.rs.
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export interface Resolution {
   width: number;
@@ -24,6 +24,10 @@ export interface Appearance {
   custom_tint: string;
   text_size: TextSize;
   reduce_transparency: boolean;
+  /** `none`, a preset id from GRADIENTS, or `custom`. */
+  gradient: string;
+  gradient_from: string;
+  gradient_to: string;
 }
 
 export interface Settings {
@@ -94,6 +98,15 @@ export interface Instance {
   last_played: string | null;
   playtime_secs: number;
   overrides: Overrides;
+  /** Another launcher's game folder this instance shares instead of its own copy. */
+  linked_dir: string | null;
+  icon: string | null;
+  icon_version: number;
+}
+
+/** URL for an instance's picture, or null when it uses its block. */
+export function iconSrc(i: Pick<Instance, "icon" | "icon_version">): string | null {
+  return i.icon ? `${convertFileSrc(i.icon)}?v=${i.icon_version}` : null;
 }
 
 export type Phase =
@@ -320,6 +333,7 @@ export interface Foreign {
   loader: Loader;
   loader_version: string | null;
   game_dir: string;
+  icon: string | null;
 }
 
 export interface Backup {
@@ -343,6 +357,8 @@ export const api = {
     invoke<Instance>("create_instance", { name, version, material, loader, loaderVersion }),
   updateInstance: (id: string, name: string, material: string | null, overrides: Overrides) =>
     invoke<Instance>("update_instance", { id, name, material, overrides }),
+  setInstanceIcon: (id: string, path: string) => invoke<Instance>("set_instance_icon", { id, path }),
+  clearInstanceIcon: (id: string) => invoke<Instance>("clear_instance_icon", { id }),
   deleteInstance: (id: string) => invoke<void>("delete_instance", { id }),
   saveSettings: (settings: Settings) => invoke<Settings>("save_settings", { settings }),
   addOfflineAccount: (username: string) => invoke<AccountStore>("add_offline_account", { username }),
@@ -363,8 +379,8 @@ export const api = {
   projectVersions: (source: Source, id: string, kind: ContentKind, instanceId: string | null) =>
     invoke<ProjectVersion[]>("project_versions", { source, id, kind, instanceId }),
   installContent: (request: InstallRequest) => invoke<number>("install_content", { request }),
-  installPack: (source: Source, projectId: string, versionId: string, title: string) =>
-    invoke<number>("install_pack", { request: { source, project_id: projectId, version_id: versionId, title } }),
+  installPack: (source: Source, projectId: string, versionId: string, title: string, iconUrl: string | null) =>
+    invoke<number>("install_pack", { request: { source, project_id: projectId, version_id: versionId, title, icon_url: iconUrl } }),
   importPackFile: (path: string) => invoke<number>("import_pack_file", { path }),
   exportPack: (id: string, path: string) => invoke<void>("export_pack", { id, path }),
   contentList: (id: string) => invoke<InstalledContent[]>("content_list", { id }),
@@ -388,7 +404,7 @@ export const api = {
   horizonMinecraft: () => invoke<string>("horizon_minecraft"),
   importScan: () => invoke<Foreign[]>("import_scan"),
   importScanFolder: (path: string) => invoke<Foreign[]>("import_scan_folder", { path }),
-  importRun: (items: Foreign[]) => invoke<number>("import_run", { items }),
+  importRun: (items: Foreign[], linked: boolean) => invoke<number>("import_run", { items, linked }),
   backups: (id: string) => invoke<Backup[]>("backups", { id }),
   backupNow: (id: string) => invoke<number>("backup_now", { id }),
   backupRestore: (id: string, world: string, file: string) => invoke<void>("backup_restore", { id, world, file }),

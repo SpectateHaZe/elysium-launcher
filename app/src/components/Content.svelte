@@ -1,6 +1,6 @@
 <!-- What's installed in an instance: enable, disable, remove, update. -->
 <script lang="ts">
-  import { app } from "../lib/store.svelte";
+  import { app, type MenuItem } from "../lib/store.svelte";
   import { api, errorText, LOADER_NAMES, type ContentKind, type ContentUpdate, type InstalledContent } from "../lib/api";
   import { installProject, installedVersion, KIND_LABELS } from "../lib/install.svelte";
 
@@ -45,6 +45,23 @@
     } catch (e) {
       app.toast(errorText(e));
     }
+  }
+
+  function pageUrl(e: InstalledContent["entry"]): string | null {
+    if (!e.project_id) return null;
+    if (e.source === "modrinth") return `https://modrinth.com/project/${encodeURIComponent(e.project_id)}`;
+    if (e.source === "curseforge") return `https://www.curseforge.com/projects/${encodeURIComponent(e.project_id)}`;
+    return null;
+  }
+
+  function menuFor(item: InstalledContent): MenuItem[] {
+    const url = pageUrl(item.entry);
+    return [
+      { label: item.enabled ? "Disable" : "Enable", icon: item.enabled ? "toggle_off" : "toggle_on", run: () => void toggle(item) },
+      ...(url ? [{ label: "Open page", icon: "open_in_new", run: () => void api.openUrl(url).catch((e) => app.toast(errorText(e))) }] : []),
+      "separator",
+      { label: "Remove", icon: "delete", danger: true, run: () => void remove(item) },
+    ];
   }
 
   async function checkUpdates() {
@@ -137,7 +154,7 @@
   {:else}
     <ul class="list group">
       {#each shown as item (item.entry.file)}
-        <li class:off={!item.enabled}>
+        <li class:off={!item.enabled} oncontextmenu={(e) => app.openMenu(e, menuFor(item))}>
           {#if item.entry.icon_url}
             <img src={item.entry.icon_url} alt="" referrerpolicy="no-referrer" />
           {:else}

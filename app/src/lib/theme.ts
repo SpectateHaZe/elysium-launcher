@@ -19,14 +19,15 @@ export interface Palette {
 
 export const PALETTES: Palette[] = [
   {
-    id: "default", name: "Default", accent: "blue",
-    light: { bg: "#f5f5f7", card: "#ffffff", fill: "#e8e8ed", fillStrong: "#d2d2d7" },
-    dark: { bg: "#000000", card: "#1c1c1e", fill: "#2c2c2e", fillStrong: "#3a3a3c" },
-  },
-  {
     id: "graphite", name: "Graphite", accent: "graphite",
     light: { bg: "#eceef1", card: "#fbfbfc", fill: "#e1e4e8", fillStrong: "#c9cdd3" },
     dark: { bg: "#121315", card: "#1e1f22", fill: "#2a2c30", fillStrong: "#3a3d42" },
+  },
+  {
+    // Id kept as `default` so existing settings files still pick it.
+    id: "default", name: "Classic", accent: "blue",
+    light: { bg: "#f5f5f7", card: "#ffffff", fill: "#e8e8ed", fillStrong: "#d2d2d7" },
+    dark: { bg: "#000000", card: "#1c1c1e", fill: "#2c2c2e", fillStrong: "#3a3a3c" },
   },
   {
     id: "midnight", name: "Midnight", accent: "indigo",
@@ -85,7 +86,8 @@ export const ACCENTS: Accent[] = [
   { id: "green", name: "Green", light: "#34c759", dark: "#30d158" },
   { id: "teal", name: "Teal", light: "#30b0c7", dark: "#40c8e0" },
   { id: "indigo", name: "Indigo", light: "#5856d6", dark: "#5e5ce6" },
-  { id: "graphite", name: "Graphite", light: "#8e8e93", dark: "#98989d" },
+  // Monochrome rather than Apple's mid-gray, so filled buttons don't read as disabled.
+  { id: "graphite", name: "Graphite", light: "#2c2c2e", dark: "#e5e5ea" },
 ];
 
 export function paletteFor(a: Appearance): Palette {
@@ -100,6 +102,39 @@ export function accentColor(a: Appearance, dark: boolean): string {
   if (id === "custom-tint") return a.custom_tint;
   const accent = ACCENTS.find((x) => x.id === id) ?? ACCENTS[0]!;
   return dark ? accent.dark : accent.light;
+}
+
+export interface Gradient {
+  id: string;
+  name: string;
+  from: string;
+  to: string;
+}
+
+/** Background gradient presets. Each is washed into the theme's background so text
+ *  and cards keep their contrast. */
+export const GRADIENTS: Gradient[] = [
+  { id: "aurora", name: "Aurora", from: "#30d158", to: "#5e5ce6" },
+  { id: "sunset", name: "Sunset", from: "#ff9500", to: "#ff2d55" },
+  { id: "ocean", name: "Ocean", from: "#40c8e0", to: "#0a84ff" },
+  { id: "dusk", name: "Dusk", from: "#5e5ce6", to: "#bf5af2" },
+  { id: "blossom", name: "Blossom", from: "#ff375f", to: "#ffd60a" },
+  { id: "nether", name: "Nether", from: "#c0281e", to: "#7a1fa2" },
+  { id: "end", name: "End", from: "#d9d27a", to: "#2b1f4f" },
+];
+
+/** The two colours of the chosen gradient, or null for none. */
+export function gradientColors(a: Appearance): [string, string] | null {
+  if (a.gradient === "custom") return isHex(a.gradient_from) && isHex(a.gradient_to) ? [a.gradient_from, a.gradient_to] : null;
+  const g = GRADIENTS.find((g) => g.id === a.gradient);
+  return g ? [g.from, g.to] : null;
+}
+
+/** A soft diagonal wash of the gradient over the theme background. */
+export function backdrop(colors: [string, string] | null, bg: string, dark: boolean): string {
+  if (!colors) return "none";
+  const k = dark ? 0.3 : 0.26;
+  return `radial-gradient(120% 90% at 0% 0%, ${mix(colors[0], bg, k)}, transparent 70%), radial-gradient(120% 90% at 100% 100%, ${mix(colors[1], bg, k)}, transparent 70%)`;
 }
 
 const TEXT_ZOOM = { small: 0.92, default: 1, large: 1.1 } as const;
@@ -124,6 +159,7 @@ export function applyAppearance(a: Appearance, dark: boolean) {
     "--accent-soft": mix(accent, t.card, dark ? 0.24 : 0.14),
   };
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
+  root.style.setProperty("--backdrop", backdrop(gradientColors(a), t.bg, dark));
   root.style.colorScheme = dark ? "dark" : "light";
   root.dataset.theme = dark ? "dark" : "light";
   root.dataset.reduceTransparency = String(a.reduce_transparency);

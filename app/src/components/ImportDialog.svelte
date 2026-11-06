@@ -9,6 +9,7 @@
   let found = $state<Foreign[] | null>(null);
   let picked = $state<Set<string>>(new Set());
   let busy = $state(false);
+  let linked = $state(false);
 
   const key = (f: Foreign) => `${f.source}:${f.game_dir}:${f.name}`;
 
@@ -44,7 +45,7 @@
     const items = (found ?? []).filter((f) => picked.has(key(f)));
     busy = true;
     try {
-      const job = await api.importRun(items);
+      const job = await api.importRun(items, linked);
       app.dialog = null;
       app.watchJob(job, (j) => {
         void app.dismissJob(j.id);
@@ -68,7 +69,11 @@
 <div class="scrim" role="presentation" onclick={() => (app.dialog = null)}></div>
 <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="import-title">
   <h2 class="headline" id="import-title">Import instances</h2>
-  <p class="body-m muted">Worlds, mods, resource packs and settings are copied. The originals stay where they are.</p>
+  <p class="body-m muted">
+    {linked
+      ? "Elysium uses the other launcher's folders directly. Worlds, mods and settings are shared, so a change in one launcher shows up in the other."
+      : "Worlds, mods, resource packs and settings are copied. The originals stay where they are."}
+  </p>
 
   {#if found === null}
     <p class="body-m muted">Looking for other launchers</p>
@@ -88,6 +93,13 @@
         </li>
       {/each}
     </ul>
+    <label class="group share">
+      <span class="info">
+        <span class="title-m">Share files instead of copying</span>
+        <span class="body-s muted">Instant and uses no extra space. Don't play the same instance in both launchers at once.</span>
+      </span>
+      <input class="switch" type="checkbox" bind:checked={linked} />
+    </label>
   {/if}
 
   <div class="buttons">
@@ -98,12 +110,15 @@
 </div>
 
 <style>
-  .scrim { position: fixed; inset: 0; background: rgb(0 0 0 / 0.32); z-index: 40; }
+  .scrim { position: fixed; inset: 0; background: rgb(0 0 0 / 0.32); z-index: 40; animation: fade 200ms linear; }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes rise { from { opacity: 0; transform: translate(-50%, calc(-50% + 24px)) scale(0.98); } }
   .dialog {
     position: fixed; z-index: 41; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: min(600px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow-y: auto;
     padding: 28px; border-radius: 28px; background: var(--card); box-shadow: var(--shadow-float);
     display: flex; flex-direction: column; gap: 14px;
+    animation: rise 350ms var(--ease-out);
   }
   .headline { font-size: 34px; }
   .list { list-style: none; margin: 0; padding: 4px 16px; background: var(--bg); max-height: 360px; overflow-y: auto; }
@@ -111,6 +126,7 @@
   li:first-child { border-top: 0; }
   label { display: flex; align-items: center; gap: 14px; padding: 12px 0; cursor: pointer; }
   .info { display: flex; flex-direction: column; min-width: 0; }
+  .share { justify-content: space-between; padding: 12px 16px; background: var(--bg); }
   .buttons { display: flex; justify-content: flex-end; gap: 8px; }
   .folder { margin-right: auto; }
 </style>

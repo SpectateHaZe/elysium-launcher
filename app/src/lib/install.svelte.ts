@@ -58,7 +58,7 @@ async function installModpack(hit: ProjectHit, versionId: string | null) {
       }
       version = best.id;
     }
-    const job = await api.installPack(hit.source, hit.id, version, hit.title);
+    const job = await api.installPack(hit.source, hit.id, version, hit.title, hit.icon_url);
     pending.add(key(hit));
     app.watchJob(job, (j) => {
       pending.delete(key(hit));

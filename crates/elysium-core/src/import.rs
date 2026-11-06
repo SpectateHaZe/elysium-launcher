@@ -27,6 +27,29 @@ pub struct Foreign {
     pub loader: ModLoader,
     pub loader_version: Option<String>,
     pub game_dir: PathBuf,
+    /// The instance's picture in the other launcher: a file path, an `https://` URL or a
+    /// `data:` URL. Read with [`icon_bytes`].
+    #[serde(default)]
+    pub icon: Option<String>,
+}
+
+/// Fetches a foreign instance's picture from wherever its launcher keeps it.
+pub async fn icon_bytes(http: &crate::http::Http, src: &str) -> Result<Vec<u8>> {
+    use base64::Engine;
+    if src.starts_with("https://") {
+        return Ok(http.get_bytes(src).await?.to_vec());
+    }
+    if let Some(data) = src.strip_prefix("data:") {
+        let b64 = data
+            .split_once(";base64,")
+            .map(|(_, b)| b)
+            .ok_or_else(|| Error::Invalid("unsupported icon data".into()))?;
+        return base64::engine::general_purpose::STANDARD
+            .decode(b64.trim())
+            .map_err(|e| Error::Invalid(format!("bad icon data: {e}")));
+    }
+    let path = Path::new(src);
+    std::fs::read(path).at(path)
 }
 
 /// Folders the other launcher manages itself; never copied.
@@ -41,6 +64,7 @@ const SKIP: &[&str] = &[
     "webcache2",
     ".fabric",
     ".cache",
+    "dynamic-data-pack-cache",
     "launcher_accounts.json",
     "launcher_profiles.json",
     "launcher_log.txt",
@@ -154,6 +178,19 @@ fn read_mmc(source: ForeignSource, dir: &Path) -> Option<Foreign> {
         .map(|d| dir.join(d))
         .find(|d| d.is_dir())
         .unwrap_or_else(|| dir.join(".minecraft"));
+    // Custom icons live in `<launcher>/icons/<iconKey>.<ext>`; built-in keys have no file.
+    let icon = cfg
+        .lines()
+        .find_map(|l| l.strip_prefix("iconKey="))
+        .filter(|k| !k.is_empty() && !k.contains(['/', '\\', '.']))
+        .and_then(|key| {
+            let icons = dir.parent()?.parent()?.join("icons");
+            ["png", "jpg", "jpeg", "gif", "webp"]
+                .iter()
+                .map(|ext| icons.join(format!("{key}.{ext}")))
+                .find(|p| p.is_file())
+        })
+        .map(|p| p.to_string_lossy().into_owned());
     Some(Foreign {
         source,
         name,
@@ -161,6 +198,7 @@ fn read_mmc(source: ForeignSource, dir: &Path) -> Option<Foreign> {
         loader,
         loader_version,
         game_dir,
+        icon,
     })
 }
 
@@ -185,6 +223,11 @@ fn read_curseforge(dir: &Path) -> Option<Foreign> {
         loader,
         loader_version,
         game_dir: dir.to_owned(),
+        icon: v
+            .pointer("/installedModpack/thumbnailUrl")
+            .and_then(Value::as_str)
+            .filter(|u| u.starts_with("https://"))
+            .map(str::to_owned),
     })
 }
 
@@ -255,13 +298,24 @@ fn read_official(root: &Path) -> Vec<Foreign> {
                 loader,
                 loader_version,
                 game_dir,
+                // Custom icons are embedded; named ones ("Furnace", …) are built in.
+                icon: p
+                    .get("icon")
+                    .and_then(Value::as_str)
+                    .filter(|i| i.starts_with("data:image/"))
+                    .map(str::to_owned),
             })
         })
         .collect()
 }
 
-fn copy_tree(src: &Path, dest: &Path, top: bool) -> Result<u64> {
-    let mut copied = 0;
+/// Creates the folders under `dest` and lists the files to bring over.
+fn plan_tree(
+    src: &Path,
+    dest: &Path,
+    top: bool,
+    files: &mut Vec<(PathBuf, PathBuf)>,
+) -> Result<()> {
     std::fs::create_dir_all(dest).at(dest)?;
     for entry in std::fs::read_dir(src).at(src)?.flatten() {
         let name = entry.file_name();
@@ -272,17 +326,64 @@ fn copy_tree(src: &Path, dest: &Path, top: bool) -> Result<u64> {
         let to = dest.join(&name);
         let ft = entry.file_type().at(&from)?;
         if ft.is_dir() {
-            copied += copy_tree(&from, &to, false)?;
+            plan_tree(&from, &to, false, files)?;
         } else if ft.is_file() {
-            copied += std::fs::copy(&from, &to).at(&from)?;
+            files.push((from, to));
         }
     }
-    Ok(copied)
+    Ok(())
 }
 
-/// Creates an Elysium instance from a foreign one and copies its game folder over
-/// (worlds, mods, configs, packs, options), leaving the original untouched.
-pub fn import(instances: &InstanceManager, foreign: &Foreign) -> Result<Instance> {
+/// Jars and zips (mods, resource packs, shader packs) are replaced, never edited in place,
+/// so a hard link is as safe as a copy. Worlds and configs are edited in place: copy them.
+fn is_immutable(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("jar") || e.eq_ignore_ascii_case("zip"))
+}
+
+fn bring_over(from: &Path, to: &Path) -> Result<()> {
+    // A hard link fails across drives or at NTFS's link limit; a copy always works.
+    if is_immutable(from) && std::fs::hard_link(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to).at(from).map(|_| ())
+}
+
+fn copy_tree(src: &Path, dest: &Path) -> Result<()> {
+    let mut files = Vec::new();
+    plan_tree(src, dest, true, &mut files)?;
+    // Small files dominate (configs, map data), so per-file overhead matters more than
+    // bandwidth: spread them over a few threads.
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
+    std::thread::scope(|s| {
+        let workers: Vec<_> = (0..threads)
+            .map(|_| {
+                s.spawn(|| {
+                    loop {
+                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some((from, to)) = files.get(i) else {
+                            return Ok(());
+                        };
+                        if let Err(e) = bring_over(from, to) {
+                            next.store(files.len(), std::sync::atomic::Ordering::Relaxed);
+                            return Err(e);
+                        }
+                    }
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .try_for_each(|w| w.join().expect("copy thread panicked"))
+    })
+}
+
+/// Creates an Elysium instance from a foreign one. By default its game folder (worlds,
+/// mods, configs, packs, options) is copied and the original left untouched. With
+/// `linked`, the instance uses the other launcher's folder directly: one set of files,
+/// shared by both launchers.
+pub fn import(instances: &InstanceManager, foreign: &Foreign, linked: bool) -> Result<Instance> {
     if !foreign.game_dir.is_dir() {
         return Err(Error::Invalid(format!(
             "{} has no game folder to copy",
@@ -295,7 +396,13 @@ pub fn import(instances: &InstanceManager, foreign: &Foreign) -> Result<Instance
         foreign.loader,
         foreign.loader_version.clone(),
     )?;
-    if let Err(e) = copy_tree(&foreign.game_dir, &instance.game_dir(), true) {
+    if linked {
+        let _ = std::fs::remove_dir(instance.game_dir());
+        return instances.update(&instance.id, |c| {
+            c.linked_dir = Some(foreign.game_dir.clone())
+        });
+    }
+    if let Err(e) = copy_tree(&foreign.game_dir, &instance.game_dir()) {
         let _ = instances.delete(&instance.id);
         return Err(e);
     }
@@ -313,7 +420,7 @@ mod tests {
         std::fs::create_dir_all(prism.join(".minecraft/mods")).unwrap();
         std::fs::write(
             prism.join("instance.cfg"),
-            "InstanceType=OneSix\nname=Better Fabric\n",
+            "InstanceType=OneSix\nname=Better Fabric\niconKey=better\n",
         )
         .unwrap();
         std::fs::write(
@@ -322,6 +429,8 @@ mod tests {
         )
         .unwrap();
         std::fs::write(prism.join(".minecraft/mods/sodium.jar"), b"jar").unwrap();
+        std::fs::create_dir_all(dir.path().join("icons")).unwrap();
+        std::fs::write(dir.path().join("icons/better.png"), b"png").unwrap();
         let found = scan_root(ForeignSource::Prism, &dir.path().join("prism"));
         assert_eq!(found.len(), 1);
         assert_eq!(
@@ -332,21 +441,26 @@ mod tests {
             ),
             ("1.21.1", ModLoader::Fabric, Some("0.16.9"))
         );
+        assert!(found[0].icon.as_deref().unwrap().ends_with("better.png"));
 
         let cf = dir.path().join("cf/All the Mods");
         std::fs::create_dir_all(&cf).unwrap();
-        std::fs::write(cf.join("minecraftinstance.json"), r#"{"name":"All the Mods","gameVersion":"1.20.1","baseModLoader":{"name":"forge-47.2.0"}}"#).unwrap();
+        std::fs::write(cf.join("minecraftinstance.json"), r#"{"name":"All the Mods","gameVersion":"1.20.1","baseModLoader":{"name":"forge-47.2.0"},"installedModpack":{"thumbnailUrl":"https://media.forgecdn.net/a.png"}}"#).unwrap();
         let found = scan_root(ForeignSource::CurseForge, &dir.path().join("cf"));
         assert_eq!(
             (found[0].loader, found[0].loader_version.as_deref()),
             (ModLoader::Forge, Some("47.2.0"))
+        );
+        assert_eq!(
+            found[0].icon.as_deref(),
+            Some("https://media.forgecdn.net/a.png")
         );
 
         let official = dir.path().join("official");
         std::fs::create_dir_all(&official).unwrap();
         std::fs::write(
             official.join("launcher_profiles.json"),
-            r#"{"profiles":{"a":{"name":"","lastVersionId":"latest-release"},"b":{"name":"Fabric","lastVersionId":"fabric-loader-0.16.9-1.21.1","gameDir":"/somewhere"},"c":{"name":"Old","lastVersionId":"1.8.9"}}}"#,
+            r#"{"profiles":{"a":{"name":"","lastVersionId":"latest-release"},"b":{"name":"Fabric","lastVersionId":"fabric-loader-0.16.9-1.21.1","gameDir":"/somewhere","icon":"data:image/png;base64,iVBORw=="},"c":{"name":"Old","lastVersionId":"1.8.9","icon":"Furnace"}}}"#,
         )
         .unwrap();
         let mut found = scan_root(ForeignSource::Official, &official);
@@ -361,6 +475,7 @@ mod tests {
             ("Fabric", ModLoader::Fabric, "1.21.1")
         );
         assert_eq!(found[1].game_dir, official);
+        assert!(found[0].icon.is_some() && found[1].icon.is_none());
     }
 
     #[test]
@@ -404,9 +519,10 @@ mod tests {
             loader: ModLoader::Vanilla,
             loader_version: None,
             game_dir: src.clone(),
+            icon: None,
         };
         let mgr = InstanceManager::new(dir.path().join("instances"));
-        let inst = import(&mgr, &foreign).unwrap();
+        let inst = import(&mgr, &foreign, false).unwrap();
         let g = inst.game_dir();
         assert!(
             g.join("saves/World/level.dat").exists()
@@ -422,5 +538,33 @@ mod tests {
             src.join("mods/a.jar").exists(),
             "the original is left alone"
         );
+        // Configs and worlds are real copies: editing one leaves the original alone.
+        std::fs::write(g.join("options.txt"), b"fov:90").unwrap();
+        assert_eq!(std::fs::read(src.join("options.txt")).unwrap(), b"fov:70");
+        assert_eq!(std::fs::read(g.join("mods/a.jar")).unwrap(), b"a");
+    }
+
+    #[test]
+    fn linked_import_shares_the_folder_and_delete_keeps_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("cf");
+        std::fs::create_dir_all(src.join("saves/World")).unwrap();
+        std::fs::write(src.join("saves/World/level.dat"), b"lvl").unwrap();
+        let foreign = Foreign {
+            source: ForeignSource::CurseForge,
+            name: "Pack".into(),
+            game_version: "1.21.1".into(),
+            loader: ModLoader::Vanilla,
+            loader_version: None,
+            game_dir: src.clone(),
+            icon: None,
+        };
+        let mgr = InstanceManager::new(dir.path().join("instances"));
+        let inst = import(&mgr, &foreign, true).unwrap();
+        assert_eq!(mgr.get(&inst.id).unwrap().game_dir(), src);
+        assert!(!inst.dir.join(".minecraft").exists());
+        mgr.delete(&inst.id).unwrap();
+        assert!(!inst.dir.exists());
+        assert!(src.join("saves/World/level.dat").exists());
     }
 }

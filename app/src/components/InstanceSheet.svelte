@@ -51,6 +51,7 @@
     }
   }
   import MaterialPicker from "./MaterialPicker.svelte";
+  import InstanceArt from "./InstanceArt.svelte";
   import MemoryFields from "./MemoryFields.svelte";
   import JavaField from "./JavaField.svelte";
   import Row from "./Row.svelte";
@@ -95,8 +96,20 @@
     </label>
 
     <section>
+      <h3 class="title-m">Picture</h3>
+      <div class="picture">
+        <span class="frame"><InstanceArt {inst} size={72} radius={16} /></span>
+        <p class="body-m muted">{inst.icon ? "Shown instead of the block." : "Use your own image instead of the block."}</p>
+        <button class="btn tonal state" onclick={() => app.chooseIcon(inst.id)}>Choose image</button>
+        {#if inst.icon}
+          <button class="btn text state" onclick={() => app.clearIcon(inst.id)}>Use block</button>
+        {/if}
+      </div>
+    </section>
+
+    <section>
       <h3 class="title-m">Block</h3>
-      <p class="body-m muted">The block shown for this instance.</p>
+      <p class="body-m muted">{inst.icon ? "Its color still tints the stage behind the picture." : "The block shown for this instance."}</p>
       <MaterialPicker
         value={materialFor(inst.material, inst.name).id}
         onchange={(material) => void app.updateInstance(inst, { material })}
@@ -220,7 +233,7 @@
       <Row title="Repair files" description="Re-checks every game file, downloads anything damaged, then starts the game">
         <button class="btn outlined state" disabled={running} onclick={() => { close(); void app.play(inst.id, true); }}>Repair</button>
       </Row>
-      <Row title="Delete instance" description="Removes its worlds, screenshots and settings for good">
+      <Row title="Delete instance" description={inst.linked_dir ? "Removes it from Elysium; its files stay in the other launcher" : "Removes its worlds, screenshots and settings for good"}>
         <button class="btn tonal danger state" disabled={running} onclick={() => (app.dialog = { delete: inst.id })}>Delete</button>
       </Row>
       </div>
@@ -229,6 +242,9 @@
 </div>
 
 <style>
+  .picture { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+  .picture p { flex: 1; min-width: 140px; }
+  .frame { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 16px; background: var(--fill); }
   .scrim {
     position: fixed;
     inset: 0;

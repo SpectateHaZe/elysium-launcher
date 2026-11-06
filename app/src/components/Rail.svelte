@@ -83,7 +83,11 @@
     border-radius: 12px;
     display: grid;
     place-items: center;
+    transition: background-color 250ms var(--ease), color 250ms var(--ease), transform 250ms var(--ease);
   }
+  .dest:active .indicator { transform: scale(0.92); }
+  .dest.active .indicator { animation: settle 380ms var(--ease); }
+  @keyframes settle { from { transform: scale(0.8); } }
   .dest:hover .indicator { background: var(--fill); }
   .dest.active { color: var(--label); }
   .dest.active .indicator { background: var(--label); color: var(--bg); }

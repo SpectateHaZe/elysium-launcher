@@ -1,5 +1,6 @@
 // Global app state (Svelte 5 runes). Components read fields directly and call methods.
 import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   api,
   errorText,
@@ -20,6 +21,10 @@ export type Route =
   | { name: "discover" }
   | { name: "accounts" }
   | { name: "settings" };
+
+export type MenuItem =
+  | { label: string; icon?: string; run: () => void; danger?: boolean; disabled?: boolean }
+  | "separator";
 
 export interface Snack {
   id: number;
@@ -49,6 +54,8 @@ class AppState {
   jobs = $state<Job[]>([]);
   /** Instance the Discover page installs into. */
   targetId = $state<string | null>(null);
+  /** The open right-click menu. */
+  menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   /** Files waiting to be downloaded by hand, per instance. */
   manual = $state<{ instanceId: string; items: ManualDownload[] } | null>(null);
   #jobPoll: ReturnType<typeof setTimeout> | null = null;
@@ -156,6 +163,48 @@ class AppState {
     this.selectedId = id;
   }
 
+  /** Opens a right-click menu at the pointer (or under the focused element). */
+  openMenu(e: MouseEvent | KeyboardEvent, items: MenuItem[]) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e instanceof MouseEvent && e.clientX + e.clientY > 0) {
+      this.menu = { x: e.clientX, y: e.clientY, items };
+    } else {
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      this.menu = { x: r.left + 12, y: r.bottom - 8, items };
+    }
+  }
+
+  /** Menu for an instance, wherever it's shown. */
+  instanceMenu(i: Instance): MenuItem[] {
+    const running = isActive(this.sessions[i.id]);
+    return [
+      running
+        ? { label: "Stop", icon: "stop", run: () => void this.stop(i.id) }
+        : { label: "Play", icon: "play_arrow", run: () => void this.play(i.id) },
+      { label: "Instance settings", icon: "tune", run: () => { this.select(i.id); this.sheetOpen = true; } },
+      ...(i.loader === "horizon" ? [] : [{ label: "Mods and packs", icon: "extension", run: () => (this.route = { name: "content", id: i.id }) }]),
+      { label: "Game log", icon: "terminal", run: () => (this.route = { name: "logs", id: i.id }) },
+      { label: "Open game folder", icon: "folder_open", run: () => void api.openFolder("instance", i.id).catch((e) => this.toast(errorText(e))) },
+      "separator",
+      { label: i.icon ? "Change picture" : "Choose picture", icon: "image", run: () => void this.chooseIcon(i.id) },
+      ...(i.icon ? [{ label: "Use block", icon: "deployed_code", run: () => void this.clearIcon(i.id) }] : []),
+      { label: "Back up worlds now", icon: "backup", disabled: running, run: () => void this.backupNow(i.id) },
+      "separator",
+      { label: "Delete", icon: "delete", danger: true, disabled: running, run: () => (this.dialog = { delete: i.id }) },
+    ];
+  }
+
+  async backupNow(id: string) {
+    this.toast("Backing up worlds");
+    try {
+      const n = await api.backupNow(id);
+      this.toast(n === 0 ? "There are no worlds to back up yet" : `Backed up ${n} world${n === 1 ? "" : "s"}`);
+    } catch (e) {
+      this.toast(errorText(e));
+    }
+  }
+
   /** Plays `id`. Without an account the game opens in the official Minecraft Launcher. */
   async play(id: string, repair = false) {
     try {
@@ -187,7 +236,34 @@ class AppState {
         patch.material === undefined ? inst.material : patch.material,
         patch.overrides ?? inst.overrides,
       );
-      this.instances = this.instances.map((i) => (i.id === updated.id ? updated : i));
+      this.#replace(updated);
+    } catch (e) {
+      this.toast(errorText(e));
+    }
+  }
+
+  #replace(updated: Instance) {
+    this.instances = this.instances.map((i) => (i.id === updated.id ? updated : i));
+  }
+
+  /** Lets the player pick a picture for the instance. */
+  async chooseIcon(id: string) {
+    const path = await openDialog({
+      title: "Choose a picture",
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+    });
+    if (typeof path !== "string") return;
+    try {
+      this.#replace(await api.setInstanceIcon(id, path));
+    } catch (e) {
+      this.toast(errorText(e));
+    }
+  }
+
+  async clearIcon(id: string) {
+    try {
+      this.#replace(await api.clearInstanceIcon(id));
     } catch (e) {
       this.toast(errorText(e));
     }
