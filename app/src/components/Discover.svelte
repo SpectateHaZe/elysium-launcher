@@ -282,14 +282,15 @@
     height: 30px;
     padding: 0 16px;
     border-radius: 999px;
-    background: var(--fill);
-    color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
     font: inherit;
     font-size: 15px;
     font-weight: 700;
     display: grid;
     place-items: center;
     cursor: pointer;
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 35%, transparent);
   }
   .get:disabled { opacity: 0.4; cursor: default; }
   .get.done { background: none; color: var(--label-3); cursor: default; font-weight: 600; }
