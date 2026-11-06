@@ -47,7 +47,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1Q0M0NjU3ODg4OUNCNkIKUldScnk0bUlWMGJNTlhkYjRJdE10aVM4OTdhS2dVeGU5cGtqNVNlcnZMb3prUW5XNkFNU3ZiS2YK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhENTQ2REVGNTVCMzVEODkKUldTSlhiTlY3MjFValVOTHJTb21RMGRxcE84ZGNMdldvSS96NVpaWHpOVUFUeTFsQkZVRHlxYUUK",
       "endpoints": [
         "https://github.com/SpectateHaZe/elysium-launcher/releases/latest/download/latest.json"
       ],
