@@ -49,6 +49,10 @@ pub struct Appearance {
     pub custom_colors: Vec<String>,
     pub custom_angle: u16,
     pub custom_intensity: u8,
+    /// A picture behind the custom theme (a copy in the data folder; empty for none) and
+    /// how much to blur it, in pixels.
+    pub background_image: String,
+    pub background_blur: u8,
     pub text_size: TextSize,
     pub reduce_transparency: bool,
     /// Window background gradient: `none`, a preset id, or `custom`.
@@ -67,6 +71,8 @@ impl Default for Appearance {
             custom_colors: vec!["#ff8cc8".into(), "#a98bff".into()],
             custom_angle: 235,
             custom_intensity: 40,
+            background_image: String::new(),
+            background_blur: 16,
             text_size: TextSize::Default,
             reduce_transparency: false,
             gradient: "none".into(),
@@ -93,6 +99,7 @@ impl Appearance {
             .for_each(|c| c.make_ascii_lowercase());
         self.custom_angle %= 360;
         self.custom_intensity = self.custom_intensity.min(100);
+        self.background_blur = self.background_blur.min(60);
         if !is_hex_color(&self.gradient_from) {
             self.gradient_from = defaults.gradient_from;
         }

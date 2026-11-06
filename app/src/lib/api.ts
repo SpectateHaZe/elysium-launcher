@@ -25,6 +25,9 @@ export interface Appearance {
   custom_colors: string[];
   custom_angle: number;
   custom_intensity: number;
+  /** The custom theme's background picture ("" for none) and its blur in pixels. */
+  background_image: string;
+  background_blur: number;
   text_size: TextSize;
   reduce_transparency: boolean;
   /** `none`, a preset id from GRADIENTS, or `custom`. */
@@ -393,6 +396,7 @@ export const api = {
   updateInstance: (id: string, name: string, material: string | null, overrides: Overrides) =>
     invoke<Instance>("update_instance", { id, name, material, overrides }),
   setInstanceIcon: (id: string, path: string) => invoke<Instance>("set_instance_icon", { id, path }),
+  importBackground: (path: string) => invoke<string>("import_background", { path }),
   clearInstanceIcon: (id: string) => invoke<Instance>("clear_instance_icon", { id }),
   instanceOverview: (id: string) => invoke<Overview>("instance_overview", { id }),
   openScreenshot: (id: string, name: string) => invoke<void>("open_screenshot", { id, name }),

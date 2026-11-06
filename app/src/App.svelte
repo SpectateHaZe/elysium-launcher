@@ -3,6 +3,7 @@
   import { applyAppearance } from "./lib/theme";
   import { theme } from "./lib/dark.svelte";
   import { api, iconSrc } from "./lib/api";
+  import { convertFileSrc } from "@tauri-apps/api/core";
   import Rail from "./components/Rail.svelte";
   import Home from "./components/Home.svelte";
   import Logs from "./components/Logs.svelte";
@@ -124,8 +125,11 @@
     void api.setPresence(details, line).catch(() => {});
   });
 
-  // The selected pack's own picture, blurred into a glow behind everything.
-  const ambient = $derived(app.selected && !app.settings?.appearance.reduce_transparency ? iconSrc(app.selected) : null);
+  // The custom theme's own background picture, if it has one.
+  const look = $derived(app.themePreview?.appearance ?? app.settings?.appearance);
+  const wallpaper = $derived(look?.palette === "custom" && look.background_image ? convertFileSrc(look.background_image) : null);
+  // Otherwise the selected pack's own picture, blurred into a glow behind everything.
+  const ambient = $derived(!wallpaper && app.selected && !look?.reduce_transparency ? iconSrc(app.selected) : null);
 
   let dontAsk = $state(false);
   const deleting = $derived(
@@ -141,6 +145,11 @@
     <p class="body-l muted">{app.fatal}</p>
   </main>
 {:else if app.ready}
+  {#if wallpaper}
+    <div class="wallpaper" aria-hidden="true" transition:fade={{ duration: 400 }}>
+      <img src={wallpaper} alt="" style:filter="blur({look?.background_blur ?? 0}px)" />
+    </div>
+  {/if}
   <div class="ambient" aria-hidden="true">
     {#key ambient}
       {#if ambient}<img src={ambient} alt="" transition:fade={{ duration: 700 }} />{/if}
@@ -228,6 +237,12 @@
 
 <style>
   .shell { position: relative; z-index: 1; display: flex; height: 100%; }
+  .wallpaper { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+  /* Scaled up so a blurred edge never shows the window behind it. */
+  .wallpaper img { position: absolute; inset: -6%; width: 112%; height: 112%; object-fit: cover; }
+  /* The theme's gradient washes over the picture so text stays readable. */
+  .wallpaper::before { content: ""; position: absolute; inset: 0; background-image: var(--backdrop); opacity: 0.35; }
+  .wallpaper::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 40%, transparent); }
   .ambient { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
   .ambient img {
     position: absolute;

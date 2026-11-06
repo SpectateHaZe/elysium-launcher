@@ -3,6 +3,9 @@
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { app } from "../lib/store.svelte";
+  import { api, errorText } from "../lib/api";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
+  import { convertFileSrc } from "@tauri-apps/api/core";
   import { theme } from "../lib/dark.svelte";
   import { hexToHsv, hsvToHex, isHex } from "../lib/color";
 
@@ -125,6 +128,20 @@
     hsv = hexToHsv(DEFAULTS.custom_colors[0]!);
   }
 
+  async function chooseImage() {
+    const path = await openDialog({
+      title: "Choose a background picture",
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+    });
+    if (typeof path !== "string") return;
+    try {
+      patch({ background_image: await api.importBackground(path) });
+    } catch (e) {
+      app.toast(errorText(e));
+    }
+  }
+
   function close() {
     app.themePreview = null;
   }
@@ -213,6 +230,25 @@
       </div>
 
       <button class="wide state" disabled={colors.length >= MAX} onclick={addColor}><span class="icon">add</span>Add color</button>
+    </section>
+
+    <section>
+      <h3>Background image</h3>
+      {#if a.background_image}
+        <div class="picture">
+          <img src={convertFileSrc(a.background_image)} alt="" style:filter="blur({a.background_blur / 4}px)" />
+          <div class="picture-actions">
+            <button class="btn tonal state" onclick={chooseImage}>Change</button>
+            <button class="icon-btn state" title="Remove the picture" aria-label="Remove the picture" onclick={() => patch({ background_image: "" })}><span class="icon">delete</span></button>
+          </div>
+        </div>
+        <label class="control">
+          <span class="row"><span>Blur</span><span class="value">{a.background_blur} px</span></span>
+          <input type="range" min="0" max="60" step="1" value={a.background_blur} oninput={(e) => patch({ background_blur: +e.currentTarget.value })} />
+        </label>
+      {:else}
+        <button class="wide state" onclick={chooseImage}><span class="icon">image</span>Choose image</button>
+      {/if}
     </section>
 
     <section>
@@ -349,6 +385,10 @@
   .row { display: flex; justify-content: space-between; font-weight: 600; }
   .value { font-variant-numeric: tabular-nums; }
   .control input { width: 100%; accent-color: var(--accent); }
+  .picture { position: relative; height: 120px; border-radius: 10px; overflow: hidden; background: var(--fill); }
+  .picture img { width: 100%; height: 100%; object-fit: cover; display: block; transform: scale(1.08); }
+  .picture-actions { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+  .picture-actions .icon-btn { background: rgb(0 0 0 / 0.45); color: #fff; backdrop-filter: blur(12px); }
   .extras { display: flex; flex-direction: column; gap: 8px; }
 
   footer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px 16px; border-top: 1px solid var(--separator); }

@@ -78,8 +78,14 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Instance pictures are the only local files the window may load.
-            let dir = app.state::<AppState>().paths.instances_dir();
-            app.asset_protocol_scope().allow_directory(&dir, true)?;
+            let paths = &app.state::<AppState>().paths;
+            app.asset_protocol_scope()
+                .allow_directory(paths.instances_dir(), true)?;
+            // So is the custom theme's background picture.
+            let backgrounds = commands::backgrounds_dir(paths);
+            std::fs::create_dir_all(&backgrounds)?;
+            app.asset_protocol_scope()
+                .allow_directory(&backgrounds, false)?;
             Ok(())
         })
         .manage(state)
@@ -100,6 +106,7 @@ fn main() {
             commands::create_instance,
             commands::update_instance,
             commands::set_instance_icon,
+            commands::import_background,
             commands::instance_overview,
             commands::open_screenshot,
             commands::startup_report,

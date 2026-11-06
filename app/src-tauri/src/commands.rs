@@ -344,6 +344,41 @@ pub fn set_instance_icon(
         .map_err(err)
 }
 
+pub fn backgrounds_dir(paths: &elysium_core::paths::Paths) -> PathBuf {
+    paths.root().join("backgrounds")
+}
+
+/// Copies a picture into the data folder for the custom theme's background and returns
+/// the copy's path. Older copies go, except the one the saved settings still use (the
+/// theme editor may be closed without applying).
+#[tauri::command(async)]
+pub fn import_background(state: State<'_, AppState>, path: PathBuf) -> CmdResult<String> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .filter(|e| ["png", "jpg", "jpeg", "gif", "webp"].contains(&e.as_str()))
+        .ok_or("Choose a PNG, JPEG, GIF or WebP picture.")?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("Couldn't read that picture: {e}"))?;
+    let dir = backgrounds_dir(&state.paths);
+    std::fs::create_dir_all(&dir).map_err(err)?;
+    let keep = PathBuf::from(&lock(&state.settings).appearance.background_image);
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            if e.path() != keep {
+                let _ = std::fs::remove_file(e.path());
+            }
+        }
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    // A new name each time, so the window never shows a cached older picture.
+    let dest = dir.join(format!("background-{stamp}.{ext}"));
+    elysium_core::fsutil::write_atomic(&dest, &bytes).map_err(err)?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub fn clear_instance_icon(state: State<'_, AppState>, id: String) -> CmdResult<InstanceView> {
     state.instances.clear_icon(&id).map_err(err)?;
