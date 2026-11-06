@@ -258,7 +258,52 @@ pub fn create_instance(
         .instances
         .update(&inst.id, |c| c.material = material)
         .map_err(err)?;
+    seed_options(&state.paths, &state.instances, &inst.id);
     Ok(inst.into())
+}
+
+/// Gives a new instance the global game options (keybinds and settings) once.
+fn seed_options(paths: &Paths, instances: &InstanceManager, id: &str) {
+    let r = elysium_core::gameopts::load(paths).and_then(|opts| {
+        if opts.is_empty() {
+            return Ok(());
+        }
+        elysium_core::gameopts::apply(&instances.get(id)?, &opts)
+    });
+    if let Err(e) = r {
+        tracing::warn!("couldn't apply the global game options to {id}: {e}");
+    }
+}
+
+/// What the launcher shows, for Discord while no game runs. Nothing when presence is off.
+#[tauri::command]
+pub fn set_presence(state: State<'_, AppState>, details: Option<String>, line: Option<String>) {
+    let on = lock(&state.settings).discord_presence;
+    state
+        .presence
+        .browsing(details.filter(|_| on).map(|d| (d, line)));
+}
+
+#[tauri::command]
+pub fn game_options(state: State<'_, AppState>) -> CmdResult<elysium_core::gameopts::GameOptions> {
+    elysium_core::gameopts::load(&state.paths).map_err(err)
+}
+
+#[tauri::command]
+pub fn save_game_options(
+    state: State<'_, AppState>,
+    options: elysium_core::gameopts::GameOptions,
+) -> CmdResult<()> {
+    elysium_core::gameopts::save(&state.paths, &options).map_err(err)
+}
+
+/// An instance's current options, to start the global ones from.
+#[tauri::command]
+pub fn game_options_from(
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<elysium_core::gameopts::GameOptions> {
+    elysium_core::gameopts::from_instance(&state.instances.get(&id).map_err(err)?).map_err(err)
 }
 
 #[tauri::command]
@@ -291,23 +336,31 @@ pub fn set_instance_icon(
     path: PathBuf,
 ) -> CmdResult<InstanceView> {
     let bytes = std::fs::read(&path).map_err(|e| format!("Couldn't read that image: {e}"))?;
+    state.instances.set_icon(&id, &bytes).map_err(err)?;
     state
         .instances
-        .set_icon(&id, &bytes)
+        .update(&id, |c| c.icon_url = None)
         .map(Into::into)
         .map_err(err)
 }
 
 #[tauri::command]
 pub fn clear_instance_icon(state: State<'_, AppState>, id: String) -> CmdResult<InstanceView> {
-    state.instances.clear_icon(&id).map(Into::into).map_err(err)
+    state.instances.clear_icon(&id).map_err(err)?;
+    state
+        .instances
+        .update(&id, |c| c.icon_url = None)
+        .map(Into::into)
+        .map_err(err)
 }
 
 /// Gives a new instance the picture its source had; a missing picture isn't an error.
 async fn adopt_icon(http: &Http, instances: &InstanceManager, id: &str, src: &str) {
     let r = async {
         let bytes = elysium_core::import::icon_bytes(http, src).await?;
-        instances.set_icon(id, &bytes)
+        instances.set_icon(id, &bytes)?;
+        let url = src.starts_with("https://").then(|| src.to_owned());
+        instances.update(id, |c| c.icon_url = url)
     }
     .await;
     if let Err(e) = r {
@@ -761,7 +814,24 @@ pub async fn launch(
         let started = Utc::now();
         set_phase(Phase::Running { since: started });
         if settings.discord_presence {
-            presence.playing(&what, &instance.config.name, started.timestamp());
+            let mods = std::fs::read_dir(instance.game_dir().join("mods"))
+                .map(|r| {
+                    r.flatten()
+                        .filter(|e| e.file_name().to_string_lossy().ends_with(".jar"))
+                        .count()
+                })
+                .unwrap_or(0);
+            let state_line = match mods {
+                0 => what.clone(),
+                1 => format!("{what}, 1 mod"),
+                n => format!("{what}, {n} mods"),
+            };
+            presence.playing(
+                &instance.config.name,
+                &state_line,
+                instance.config.icon_url.as_deref(),
+                started.timestamp(),
+            );
         }
         let window = app.get_webview_window("main");
         if settings.hide_on_launch
@@ -820,7 +890,9 @@ pub async fn launch(
         {
             let _ = w.unminimize();
         }
-        presence.clear();
+        if settings.discord_presence {
+            presence.clear();
+        }
 
         match outcome {
             Ok(exit) => {
@@ -1002,6 +1074,7 @@ pub struct PackRequest {
 pub fn install_pack(state: State<'_, AppState>, request: PackRequest) -> CmdResult<u64> {
     let content = state.content();
     let instances = state.instances.clone();
+    let paths = state.paths.clone();
     let cache = state.paths.meta_dir().join("packs");
     let concurrency = lock(&state.settings).concurrent_downloads.clamp(1, 64);
     let http = state.http.clone();
@@ -1041,6 +1114,9 @@ pub fn install_pack(state: State<'_, AppState>, request: PackRequest) -> CmdResu
         ) {
             adopt_icon(&http, &instances, &pack.instance_id, url).await;
         }
+        if let Ok(pack) = &r {
+            seed_options(&paths, &instances, &pack.instance_id);
+        }
         jobs::finish(&job, r);
     });
     Ok(id)
@@ -1050,6 +1126,7 @@ pub fn install_pack(state: State<'_, AppState>, request: PackRequest) -> CmdResu
 pub fn import_pack_file(state: State<'_, AppState>, path: PathBuf) -> CmdResult<u64> {
     let content = state.content();
     let instances = state.instances.clone();
+    let paths = state.paths.clone();
     let concurrency = lock(&state.settings).concurrent_downloads.clamp(1, 64);
     let name = path
         .file_name()
@@ -1066,6 +1143,9 @@ pub fn import_pack_file(state: State<'_, AppState>, path: PathBuf) -> CmdResult<
                 .import_curseforge_pack(&instances, &path, None, concurrency, progress)
                 .await
         };
+        if let Ok(pack) = &r {
+            seed_options(&paths, &instances, &pack.instance_id);
+        }
         jobs::finish(&job, r);
     });
     Ok(id)
@@ -1360,6 +1440,7 @@ pub fn import_run(
     linked: bool,
 ) -> CmdResult<u64> {
     let instances = state.instances.clone();
+    let paths = state.paths.clone();
     let http = state.http.clone();
     let (id, progress, job) = state.jobs.start(format!(
         "Importing {} instance{}",
@@ -1394,6 +1475,10 @@ pub fn import_run(
                 Ok(inst) => {
                     if let Some(src) = &f.icon {
                         adopt_icon(&http, &instances, &inst.id, src).await;
+                    }
+                    // A shared instance's options belong to the other launcher too.
+                    if !linked {
+                        seed_options(&paths, &instances, &inst.id);
                     }
                     ok.push(inst.id);
                 }
@@ -1487,7 +1572,6 @@ const PERFORMANCE_MODS: &[&str] = &[
     "ferrite-core",
     "entityculling",
     "immediatelyfast",
-    "modernfix",
 ];
 
 #[tauri::command]

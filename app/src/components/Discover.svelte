@@ -119,8 +119,8 @@
       <div class="right">
         <select bind:value={source} aria-label="Source" class="pill-select">
           <option value="all">All sources</option>
-          <option value="modrinth">Modrinth</option>
           <option value="curseforge">CurseForge</option>
+          <option value="modrinth">Modrinth</option>
         </select>
         <select bind:value={sort} aria-label="Sort" class="pill-select">
           <option value="relevance">Relevance</option>

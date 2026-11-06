@@ -152,7 +152,8 @@ pub fn best_version(versions: &[ProjectVersion]) -> Option<&ProjectVersion> {
     })
 }
 
-/// Interleaves two result lists, dropping CurseForge duplicates of Modrinth projects.
+/// Interleaves two result lists, CurseForge first. A project on both sites is shown once,
+/// from CurseForge.
 pub fn merge_results(modrinth: Vec<ProjectHit>, curseforge: Vec<ProjectHit>) -> Vec<ProjectHit> {
     let key = |h: &ProjectHit| {
         h.title
@@ -161,13 +162,13 @@ pub fn merge_results(modrinth: Vec<ProjectHit>, curseforge: Vec<ProjectHit>) -> 
             .filter(|c| c.is_alphanumeric())
             .collect::<String>()
     };
-    let seen: std::collections::HashSet<String> = modrinth.iter().map(key).collect();
-    let curseforge: Vec<ProjectHit> = curseforge
+    let seen: std::collections::HashSet<String> = curseforge.iter().map(key).collect();
+    let modrinth: Vec<ProjectHit> = modrinth
         .into_iter()
         .filter(|h| !seen.contains(&key(h)))
         .collect();
     let mut out = Vec::with_capacity(modrinth.len() + curseforge.len());
-    let (mut a, mut b) = (modrinth.into_iter(), curseforge.into_iter());
+    let (mut a, mut b) = (curseforge.into_iter(), modrinth.into_iter());
     loop {
         match (a.next(), b.next()) {
             (None, None) => break,
@@ -208,8 +209,10 @@ mod tests {
             hit(Source::CurseForge, "JEI"),
             hit(Source::CurseForge, "Create"),
         ];
-        let titles: Vec<_> = merge_results(m, c).into_iter().map(|h| h.title).collect();
-        assert_eq!(titles, ["Sodium", "JEI", "Lithium", "Create"]);
+        let merged = merge_results(m, c);
+        let titles: Vec<_> = merged.iter().map(|h| h.title.as_str()).collect();
+        assert_eq!(titles, ["sodium", "Lithium", "JEI", "Create"]);
+        assert_eq!(merged[0].source, Source::CurseForge);
     }
 
     #[test]

@@ -1,9 +1,8 @@
 <!-- First run: how do you want to play? Signing in here is optional. -->
 <script lang="ts">
+  import logo from "../assets/logo.png";
   import { app } from "../lib/store.svelte";
   import { api, errorText, type Foreign } from "../lib/api";
-  import Block from "./Block.svelte";
-  import { materialFor } from "../lib/theme";
 
   let found = $state<Foreign[]>([]);
   let name = $state("");
@@ -41,7 +40,7 @@
 
 <div class="screen" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
   <div class="inner">
-    <Block material={materialFor("amethyst")} key="welcome" size={120} />
+    <img class="logo" src={logo} alt="" width="120" height="120" />
     <h1 class="display" id="welcome-title">Welcome to Elysium</h1>
     <p class="subhead muted">Choose how you'd like to play. You can change this any time in Accounts.</p>
 
@@ -82,6 +81,7 @@
 </div>
 
 <style>
+  .logo { display: block; filter: drop-shadow(0 8px 20px rgb(0 0 0 / 0.25)); }
   .screen {
     position: fixed;
     inset: 0;

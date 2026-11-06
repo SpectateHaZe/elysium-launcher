@@ -11,6 +11,7 @@ pub mod content;
 pub mod crash;
 pub mod error;
 pub mod fsutil;
+pub mod gameopts;
 pub mod horizon;
 pub mod http;
 pub mod import;

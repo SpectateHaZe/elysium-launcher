@@ -1,23 +1,22 @@
 <!-- Material 3 navigation rail. -->
 <script lang="ts">
   import { app } from "../lib/store.svelte";
-  import Block from "./Block.svelte";
-  import { materialFor } from "../lib/theme";
+  import logo from "../assets/logo.png";
 
   const items = [
     { route: "home", icon: "home", label: "Home" },
     { route: "discover", icon: "explore", label: "Discover" },
     { route: "accounts", icon: "account_circle", label: "Accounts" },
+    { route: "game", icon: "sports_esports", label: "Game" },
     { route: "settings", icon: "settings", label: "Settings" },
   ] as const;
 
   const current = $derived(app.route.name === "logs" || app.route.name === "content" ? "home" : app.route.name);
-  const mark = materialFor("amethyst");
 </script>
 
 <nav class="rail" aria-label="Main">
   <div class="mark" title="Elysium Launcher">
-    <Block material={mark} key="rail-mark" size={40} />
+    <img src={logo} alt="" width="44" height="44" />
   </div>
   <ul>
     {#each items as item (item.route)}
@@ -62,6 +61,7 @@
     border-right: 0.5px solid var(--separator);
   }
   .mark { margin-bottom: 32px; }
+  .mark img { display: block; filter: drop-shadow(0 4px 8px rgb(0 0 0 / 0.25)); }
   ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .dest {
     appearance: none;

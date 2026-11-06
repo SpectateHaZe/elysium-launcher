@@ -8,6 +8,7 @@
   import Logs from "./components/Logs.svelte";
   import Accounts from "./components/Accounts.svelte";
   import Settings from "./components/Settings.svelte";
+  import GameSettings from "./components/GameSettings.svelte";
   import InstanceSheet from "./components/InstanceSheet.svelte";
   import NewInstanceDialog from "./components/NewInstanceDialog.svelte";
   import ConfirmDialog from "./components/ConfirmDialog.svelte";
@@ -38,6 +39,24 @@
 
   // Replaces the browser's menu everywhere. Components with their own menu handle the
   // event first; here, text fields get editing commands and selected text gets Copy.
+  // Mouse back and forward buttons (and Alt+Left/Right) move through pages. The default
+  // would navigate the web view itself, so it's cancelled.
+  function onmouseup(e: MouseEvent) {
+    // Keybind buttons take side buttons as bindings.
+    if ((e.button === 3 || e.button === 4) && !(e.target as Element | null)?.closest?.("[data-keep-mouse]")) {
+      e.preventDefault();
+      if (e.button === 3) app.back();
+      else app.forward();
+    }
+  }
+
+  function onkeydown(e: KeyboardEvent) {
+    if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    e.preventDefault();
+    if (e.key === "ArrowLeft") app.back();
+    else app.forward();
+  }
+
   function oncontextmenu(e: MouseEvent) {
     if (e.defaultPrevented) return;
     e.preventDefault();
@@ -84,13 +103,33 @@
     if (!root.classList.contains("theme-ready")) requestAnimationFrame(() => root.classList.add("theme-ready"));
   });
 
+  // Discord: what you're doing in Elysium while no game runs.
+  const presence = $derived.by((): [string | null, string | null] => {
+    if (!app.settings?.discord_presence) return [null, null];
+    const r = app.route;
+    const name = (id: string) => app.instances.find((i) => i.id === id)?.name ?? null;
+    switch (r.name) {
+      case "home": return ["Browsing the library", `${app.instances.length} instance${app.instances.length === 1 ? "" : "s"}`];
+      case "content": return ["Managing mods", name(r.id)];
+      case "logs": return ["Reading a game log", name(r.id)];
+      case "discover": return ["Discovering mods and modpacks", null];
+      case "accounts": return ["Checking accounts", null];
+      case "game": return ["Setting up keybinds", null];
+      case "settings": return ["Changing settings", null];
+    }
+  });
+  $effect(() => {
+    const [details, line] = presence;
+    void api.setPresence(details, line).catch(() => {});
+  });
+
   let dontAsk = $state(false);
   const deleting = $derived(
     app.dialog && typeof app.dialog === "object" ? app.instances.find((i) => i.id === (app.dialog as { delete: string }).delete) : undefined,
   );
 </script>
 
-<svelte:window {oncontextmenu} />
+<svelte:window {oncontextmenu} {onmouseup} {onkeydown} />
 
 {#if app.fatal}
   <main class="fatal">
@@ -113,6 +152,8 @@
         <Discover />
       {:else if app.route.name === "accounts"}
         <Accounts />
+      {:else if app.route.name === "game"}
+        <GameSettings />
       {:else if app.route.name === "settings"}
         <Settings />
       {/if}

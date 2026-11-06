@@ -339,8 +339,7 @@
                 class:selected
                 aria-pressed={selected}
                 title={i.name}
-                onclick={() => app.select(i.id)}
-                ondblclick={() => app.play(i.id)}
+                onclick={() => app.open(i)}
                 oncontextmenu={(e) => app.openMenu(e, app.instanceMenu(i))}
                 onkeydown={(e) => menuKey(e, i)}
               >
@@ -371,8 +370,7 @@
               aria-current={selected ? "true" : undefined}
               animate:flip={{ duration: 300, easing: cubicOut }}
               in:fly={{ y: 8, duration: 300, delay: Math.min(n, 16) * 18, easing: cubicOut }}
-              onclick={() => app.select(i.id)}
-              ondblclick={() => app.play(i.id)}
+              onclick={() => app.open(i)}
               oncontextmenu={(e) => app.openMenu(e, app.instanceMenu(i))}
               onkeydown={(e) => menuKey(e, i)}
             >

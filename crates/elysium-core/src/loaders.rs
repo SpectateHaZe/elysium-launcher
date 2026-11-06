@@ -233,6 +233,11 @@ pub async fn ensure_installed(
             Ok(id)
         }
         ModLoader::Forge | ModLoader::NeoForge => {
+            // The official installers write the version file themselves, not atomically:
+            // two launches installing at once would read each other's half-written file.
+            // One install at a time; the second then finds the first's result below.
+            static INSTALLING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+            let _one_at_a_time = INSTALLING.lock().await;
             let key = index_key(c.loader, mc, lv);
             let mut index: HashMap<String, String> =
                 fsutil::read_json(&index_file(paths))?.unwrap_or_default();

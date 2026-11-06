@@ -98,6 +98,10 @@ pub struct InstanceConfig {
     /// Deleting the instance deletes it there too, see [`linked_home`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub linked_dir: Option<PathBuf>,
+    /// Web address of the picture, when it came from Modrinth or CurseForge (Discord can
+    /// show it; it can't show local files).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -254,6 +258,7 @@ impl InstanceManager {
                 material: None,
                 overrides: InstanceOverrides::default(),
                 linked_dir: None,
+                icon_url: None,
             },
             id,
             dir,

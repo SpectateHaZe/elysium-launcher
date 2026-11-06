@@ -20,6 +20,7 @@ export type Route =
   | { name: "content"; id: string }
   | { name: "discover" }
   | { name: "accounts" }
+  | { name: "game" }
   | { name: "settings" };
 
 export type MenuItem =
@@ -42,7 +43,35 @@ class AppState {
   instances = $state<Instance[]>([]);
   sessions = $state<Record<string, SessionView>>({});
   selectedId = $state<string | null>(null);
-  route = $state<Route>({ name: "home" });
+  #route = $state<Route>({ name: "home" });
+  #back: Route[] = [];
+  #forward: Route[] = [];
+
+  /** The page shown. Setting it records history for the mouse back and forward buttons. */
+  get route(): Route {
+    return this.#route;
+  }
+  set route(next: Route) {
+    if (JSON.stringify(next) === JSON.stringify(this.#route)) return;
+    this.#back.push(this.#route);
+    if (this.#back.length > 50) this.#back.shift();
+    this.#forward = [];
+    this.#route = next;
+  }
+
+  back() {
+    const prev = this.#back.pop();
+    if (!prev) return;
+    this.#forward.push(this.#route);
+    this.#route = prev;
+  }
+
+  forward() {
+    const next = this.#forward.pop();
+    if (!next) return;
+    this.#back.push(this.#route);
+    this.#route = next;
+  }
   manifest = $state<VersionManifest | null>(null);
   manifestError = $state<string | null>(null);
   snack = $state<Snack | null>(null);
@@ -161,6 +190,12 @@ class AppState {
 
   select(id: string) {
     this.selectedId = id;
+  }
+
+  /** A click on an instance: select it and open its mods and packs (Horizon has none). */
+  open(i: Instance) {
+    this.selectedId = i.id;
+    if (i.loader !== "horizon") this.route = { name: "content", id: i.id };
   }
 
   /** Opens a right-click menu at the pointer (or under the focused element). */
