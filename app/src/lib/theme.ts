@@ -1,6 +1,6 @@
 // Appearance: Apple-style palettes, system accent colours and user customisation.
 import type { Appearance } from "./api";
-import { hexToHsl, hslToHex, isHex, mix, onColor, withAlpha } from "./color";
+import { average, hexToHsl, hslToHex, isHex, mix, onColor, withAlpha } from "./color";
 
 interface Tokens {
   bg: string;
@@ -50,22 +50,40 @@ export const PALETTES: Palette[] = [
     dark: { bg: "#160c10", card: "#24151b", fill: "#311e25", fillStrong: "#432a33" },
   },
   {
+    // Petal pinks over a plum night, after Cyrene from Honkai: Star Rail.
+    id: "cyrene", name: "Cyrene", accent: "blossom",
+    light: { bg: "#fbf0f6", card: "#fffafd", fill: "#f5e1ec", fillStrong: "#eacbdc" },
+    dark: { bg: "#160d17", card: "#241726", fill: "#332137", fillStrong: "#46304b" },
+  },
+  {
     id: "sand", name: "Sand", accent: "orange",
     light: { bg: "#f5f2ec", card: "#fffdf9", fill: "#ebe5da", fillStrong: "#dbd2c2" },
     dark: { bg: "#15120e", card: "#221e18", fill: "#2f2a22", fillStrong: "#3f382d" },
   },
 ];
 
-/** Builds a palette from one tint colour, keeping Apple's neutral contrast levels. */
-export function customPalette(tint: string): Palette {
-  const t = isHex(tint) ? tint : "#5e5ce6";
+type Custom = Pick<Appearance, "custom_colors" | "custom_angle" | "custom_intensity">;
+
+const customColors = (a: Custom) => (a.custom_colors.filter(isHex).length ? a.custom_colors.filter(isHex) : ["#ff8cc8"]);
+
+/** The custom theme's surfaces, tinted by its gradient's colours as strongly as its intensity says. */
+export function customPalette(a: Custom): Palette {
+  const t = average(customColors(a));
+  const k = a.custom_intensity / 100;
   return {
     id: "custom",
     name: "Custom",
     accent: "custom-tint",
-    light: { bg: mix(t, "#f5f5f7", 0.07), card: mix(t, "#ffffff", 0.02), fill: mix(t, "#e8e8ed", 0.1), fillStrong: mix(t, "#d2d2d7", 0.14) },
-    dark: { bg: mix(t, "#000000", 0.1), card: mix(t, "#1c1c1e", 0.12), fill: mix(t, "#2c2c2e", 0.14), fillStrong: mix(t, "#3a3a3c", 0.16) },
+    light: { bg: mix(t, "#f5f5f7", 0.06 + 0.2 * k), card: mix(t, "#ffffff", 0.02 + 0.08 * k), fill: mix(t, "#e8e8ed", 0.08 + 0.2 * k), fillStrong: mix(t, "#d2d2d7", 0.1 + 0.22 * k) },
+    dark: { bg: mix(t, "#000000", 0.08 + 0.22 * k), card: mix(t, "#1c1c1e", 0.08 + 0.18 * k), fill: mix(t, "#2c2c2e", 0.1 + 0.2 * k), fillStrong: mix(t, "#3a3a3c", 0.12 + 0.2 * k) },
   };
+}
+
+/** The custom theme's gradient across the window. */
+export function customBackdrop(a: Custom, bg: string): string {
+  const k = 0.12 + 0.5 * (a.custom_intensity / 100);
+  const stops = customColors(a).map((c) => mix(c, bg, k));
+  return `linear-gradient(${a.custom_angle}deg, ${stops.length === 1 ? `${stops[0]}, ${stops[0]}` : stops.join(", ")})`;
 }
 
 export interface Accent {
@@ -80,6 +98,7 @@ export const ACCENTS: Accent[] = [
   { id: "blue", name: "Blue", light: "#007aff", dark: "#0a84ff" },
   { id: "purple", name: "Purple", light: "#af52de", dark: "#bf5af2" },
   { id: "pink", name: "Pink", light: "#ff2d55", dark: "#ff375f" },
+  { id: "blossom", name: "Blossom", light: "#d9488f", dark: "#ff8cc8" },
   { id: "red", name: "Red", light: "#ff3b30", dark: "#ff453a" },
   { id: "orange", name: "Orange", light: "#ff9500", dark: "#ff9f0a" },
   { id: "yellow", name: "Yellow", light: "#ffcc00", dark: "#ffd60a" },
@@ -91,7 +110,7 @@ export const ACCENTS: Accent[] = [
 ];
 
 export function paletteFor(a: Appearance): Palette {
-  if (a.palette === "custom") return customPalette(a.custom_tint);
+  if (a.palette === "custom") return customPalette(a);
   return PALETTES.find((p) => p.id === a.palette) ?? PALETTES[0]!;
 }
 
@@ -99,7 +118,7 @@ export function accentColor(a: Appearance, dark: boolean): string {
   if (a.accent === "custom" && isHex(a.custom_accent)) return a.custom_accent;
   const palette = paletteFor(a);
   const id = a.accent === "palette" ? palette.accent : a.accent;
-  if (id === "custom-tint") return a.custom_tint;
+  if (id === "custom-tint") return customColors(a)[0]!;
   const accent = ACCENTS.find((x) => x.id === id) ?? ACCENTS[0]!;
   return dark ? accent.dark : accent.light;
 }
@@ -119,6 +138,7 @@ export const GRADIENTS: Gradient[] = [
   { id: "ocean", name: "Ocean", from: "#40c8e0", to: "#0a84ff" },
   { id: "dusk", name: "Dusk", from: "#5e5ce6", to: "#bf5af2" },
   { id: "blossom", name: "Blossom", from: "#ff375f", to: "#ffd60a" },
+  { id: "cyrene", name: "Cyrene", from: "#ff8cc8", to: "#a98bff" },
   { id: "nether", name: "Nether", from: "#c0281e", to: "#7a1fa2" },
   { id: "end", name: "End", from: "#d9d27a", to: "#2b1f4f" },
 ];
@@ -159,7 +179,7 @@ export function applyAppearance(a: Appearance, dark: boolean) {
     "--accent-soft": mix(accent, t.card, dark ? 0.24 : 0.14),
   };
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
-  root.style.setProperty("--backdrop", backdrop(gradientColors(a), t.bg, dark));
+  root.style.setProperty("--backdrop", a.palette === "custom" ? customBackdrop(a, t.bg) : backdrop(gradientColors(a), t.bg, dark));
   root.style.colorScheme = dark ? "dark" : "light";
   root.dataset.theme = dark ? "dark" : "light";
   root.dataset.reduceTransparency = String(a.reduce_transparency);

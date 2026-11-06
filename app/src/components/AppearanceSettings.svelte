@@ -2,7 +2,7 @@
 <script lang="ts">
   import { app } from "../lib/store.svelte";
   import { theme } from "../lib/dark.svelte";
-  import { ACCENTS, GRADIENTS, PALETTES, accentColor, backdrop, customPalette, paletteFor, type Palette } from "../lib/theme";
+  import { ACCENTS, GRADIENTS, PALETTES, accentColor, backdrop, customBackdrop, customPalette, paletteFor, type Palette } from "../lib/theme";
   import { isHex } from "../lib/color";
   import type { Appearance, TextSize, ThemePref } from "../lib/api";
   import Row from "./Row.svelte";
@@ -10,7 +10,7 @@
   const s = $derived(app.settings!);
   const a = $derived(s.appearance);
   const dark = $derived(theme.dark);
-  const palettes = $derived<Palette[]>([...PALETTES, customPalette(a.custom_tint)]);
+  const palettes = $derived<Palette[]>([...PALETTES, customPalette(a)]);
 
   const modes: { value: ThemePref; label: string; icon: string }[] = [
     { value: "system", label: "Auto", icon: "contrast" },
@@ -29,10 +29,15 @@
 
   // Native colour pickers fire `input` continuously; save at most every 120 ms.
   let pending: ReturnType<typeof setTimeout> | null = null;
-  function setColor(key: "custom_accent" | "custom_tint" | "gradient_from" | "gradient_to", value: string, extra: Partial<Appearance> = {}) {
+  function setColor(key: "custom_accent" | "gradient_from" | "gradient_to", value: string, extra: Partial<Appearance> = {}) {
     if (!isHex(value)) return;
     if (pending) clearTimeout(pending);
     pending = setTimeout(() => setAppearance({ [key]: value.toLowerCase(), ...extra }), 120);
+  }
+
+  // The custom theme opens its editor, which previews live and saves on Apply.
+  function editCustom() {
+    app.themePreview = { theme: s.theme, appearance: { ...a, palette: "custom", custom_colors: [...a.custom_colors] } };
   }
 
   const themeAccent = $derived(accentColor({ ...a, accent: "palette" }, dark));
@@ -61,8 +66,8 @@
       {@const t = p[dark ? "dark" : "light"]}
       {@const selected = paletteFor(a).id === p.id}
       {@const accent = accentColor({ ...a, palette: p.id, accent: "palette" }, dark)}
-      <button class="theme" role="radio" aria-checked={selected} onclick={() => setAppearance({ palette: p.id })}>
-        <span class="preview" class:selected style:background={t.bg}>
+      <button class="theme" role="radio" aria-checked={selected} onclick={() => (p.id === "custom" ? editCustom() : setAppearance({ palette: p.id }))}>
+        <span class="preview" class:selected style:background-color={t.bg} style:background-image={p.id === "custom" ? customBackdrop(a, t.bg) : undefined}>
           <span class="side" style:background={t.fill}></span>
           <span class="win" style:background={t.card}>
             <span class="line" style:background={t.fillStrong}></span>
@@ -77,20 +82,12 @@
 </div>
 
 {#if a.palette === "custom"}
-  <Row title="Theme tint" description="The custom theme's surfaces are built from this color">
-    <label class="color-field">
-      <span class="dot" style:background={a.custom_tint}></span>
-      <input
-        type="color"
-        value={a.custom_tint}
-        aria-label="Theme tint"
-        oninput={(e) => setColor("custom_tint", e.currentTarget.value)}
-      />
-      <span class="hex">{a.custom_tint.toUpperCase()}</span>
-    </label>
+  <Row title="Custom theme" description="Colors, gradient direction and intensity">
+    <button class="btn tonal state" onclick={editCustom}>Customize</button>
   </Row>
 {/if}
 
+{#if a.palette !== "custom"}
 <div class="block">
   <p class="title-m">Background</p>
   <div class="themes" role="radiogroup" aria-label="Background gradient">
@@ -114,6 +111,7 @@
     </div>
   {/if}
 </div>
+{/if}
 
 <div class="block">
   <p class="title-m">Accent color</p>

@@ -5,6 +5,8 @@ import {
   api,
   errorText,
   type AccountStore,
+  type Appearance,
+  type ThemePref,
   type Instance,
   type Job,
   type ManualDownload,
@@ -84,6 +86,8 @@ class AppState {
   /** Instance the Discover page installs into. */
   targetId = $state<string | null>(null);
   /** The open right-click menu. */
+  /** The theme editor's unsaved theme, shown live while it's open. */
+  themePreview = $state<{ appearance: Appearance; theme: ThemePref } | null>(null);
   menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   /** Files waiting to be downloaded by hand, per instance. */
   manual = $state<{ instanceId: string; items: ManualDownload[] } | null>(null);

@@ -2,7 +2,7 @@
   import { app } from "./lib/store.svelte";
   import { applyAppearance } from "./lib/theme";
   import { theme } from "./lib/dark.svelte";
-  import { api } from "./lib/api";
+  import { api, iconSrc } from "./lib/api";
   import Rail from "./components/Rail.svelte";
   import Home from "./components/Home.svelte";
   import Logs from "./components/Logs.svelte";
@@ -23,7 +23,8 @@
   import ImportDialog from "./components/ImportDialog.svelte";
   import { updater } from "./lib/updater.svelte";
   import ContextMenu from "./components/ContextMenu.svelte";
-  import { fly } from "svelte/transition";
+  import ThemeEditor from "./components/ThemeEditor.svelte";
+  import { fade, fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
 
   const routeKey = $derived("id" in app.route ? `${app.route.name}:${app.route.id}` : app.route.name);
@@ -98,7 +99,7 @@
 
   $effect(() => {
     if (!app.settings) return;
-    applyAppearance(app.settings.appearance, theme.dark);
+    applyAppearance(app.themePreview?.appearance ?? app.settings.appearance, theme.dark);
     const root = document.documentElement;
     if (!root.classList.contains("theme-ready")) requestAnimationFrame(() => root.classList.add("theme-ready"));
   });
@@ -123,6 +124,9 @@
     void api.setPresence(details, line).catch(() => {});
   });
 
+  // The selected pack's own picture, blurred into a glow behind everything.
+  const ambient = $derived(app.selected && !app.settings?.appearance.reduce_transparency ? iconSrc(app.selected) : null);
+
   let dontAsk = $state(false);
   const deleting = $derived(
     app.dialog && typeof app.dialog === "object" ? app.instances.find((i) => i.id === (app.dialog as { delete: string }).delete) : undefined,
@@ -137,6 +141,11 @@
     <p class="body-l muted">{app.fatal}</p>
   </main>
 {:else if app.ready}
+  <div class="ambient" aria-hidden="true">
+    {#key ambient}
+      {#if ambient}<img src={ambient} alt="" transition:fade={{ duration: 700 }} />{/if}
+    {/key}
+  </div>
   <div class="shell">
     <Rail />
     <main>
@@ -212,10 +221,27 @@
   <UpdateBanner />
   <Snackbar />
   <ContextMenu />
+  {#if app.themePreview}
+    <ThemeEditor />
+  {/if}
 {/if}
 
 <style>
-  .shell { display: flex; height: 100%; }
+  .shell { position: relative; z-index: 1; display: flex; height: 100%; }
+  .ambient { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+  .ambient img {
+    position: absolute;
+    inset: -15%;
+    width: 130%;
+    height: 130%;
+    object-fit: cover;
+    filter: blur(96px) saturate(1.5);
+    opacity: 0.34;
+    animation: drift 60s ease-in-out infinite alternate;
+  }
+  :global([data-theme="light"]) .ambient img { opacity: 0.24; }
+  @keyframes drift { to { transform: scale(1.12) translate(3%, -2%) rotate(4deg); } }
+  @media (prefers-reduced-motion: reduce) { .ambient img { animation: none; } }
   main { flex: 1; min-width: 0; height: 100%; }
   .page { height: 100%; }
   .fatal { padding: 64px; max-width: 640px; }

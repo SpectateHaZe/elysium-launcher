@@ -7,7 +7,7 @@ media.addEventListener("change", (e) => (systemDark = e.matches));
 
 export const theme = {
   get dark() {
-    const pref = app.settings?.theme ?? "system";
+    const pref = app.themePreview?.theme ?? app.settings?.theme ?? "system";
     return pref === "dark" || (pref === "system" && systemDark);
   },
 };

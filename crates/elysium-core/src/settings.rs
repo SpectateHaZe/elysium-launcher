@@ -44,8 +44,11 @@ pub struct Appearance {
     pub accent: String,
     /// `#rrggbb` used when `accent` is `custom`.
     pub custom_accent: String,
-    /// `#rrggbb` the custom palette is derived from.
-    pub custom_tint: String,
+    /// The custom theme's gradient: 1 to 5 `#rrggbb` colors, its angle in degrees, and
+    /// how strongly it tints the window (0 to 100).
+    pub custom_colors: Vec<String>,
+    pub custom_angle: u16,
+    pub custom_intensity: u8,
     pub text_size: TextSize,
     pub reduce_transparency: bool,
     /// Window background gradient: `none`, a preset id, or `custom`.
@@ -61,7 +64,9 @@ impl Default for Appearance {
             palette: "graphite".into(),
             accent: "palette".into(),
             custom_accent: "#007aff".into(),
-            custom_tint: "#5e5ce6".into(),
+            custom_colors: vec!["#ff8cc8".into(), "#a98bff".into()],
+            custom_angle: 235,
+            custom_intensity: 40,
             text_size: TextSize::Default,
             reduce_transparency: false,
             gradient: "none".into(),
@@ -78,9 +83,16 @@ impl Appearance {
         if !is_hex_color(&self.custom_accent) {
             self.custom_accent = defaults.custom_accent;
         }
-        if !is_hex_color(&self.custom_tint) {
-            self.custom_tint = defaults.custom_tint;
+        self.custom_colors.retain(|c| is_hex_color(c));
+        self.custom_colors.truncate(5);
+        if self.custom_colors.is_empty() {
+            self.custom_colors = defaults.custom_colors;
         }
+        self.custom_colors
+            .iter_mut()
+            .for_each(|c| c.make_ascii_lowercase());
+        self.custom_angle %= 360;
+        self.custom_intensity = self.custom_intensity.min(100);
         if !is_hex_color(&self.gradient_from) {
             self.gradient_from = defaults.gradient_from;
         }
@@ -91,7 +103,6 @@ impl Appearance {
             self.gradient = defaults.gradient;
         }
         self.custom_accent.make_ascii_lowercase();
-        self.custom_tint.make_ascii_lowercase();
         self.gradient_from.make_ascii_lowercase();
         self.gradient_to.make_ascii_lowercase();
         if self.palette.is_empty() {
@@ -330,14 +341,16 @@ mod tests {
 
         let mut a = Appearance {
             custom_accent: "red".into(),
-            custom_tint: "#ABCDEF".into(),
+            custom_colors: vec!["#ABCDEF".into(), "pink".into()],
+            custom_angle: 400,
             palette: String::new(),
             gradient_to: "blue".into(),
             ..Default::default()
         };
         a.sanitize();
         assert_eq!(a.custom_accent, "#007aff");
-        assert_eq!(a.custom_tint, "#abcdef");
+        assert_eq!(a.custom_colors, ["#abcdef"]);
+        assert_eq!(a.custom_angle, 40);
         assert_eq!(a.palette, "graphite");
         assert_eq!(a.gradient_to, "#ff2d55");
         assert!(is_hex_color("#00ff7A"));

@@ -21,7 +21,10 @@ export interface Appearance {
   palette: string;
   accent: string;
   custom_accent: string;
-  custom_tint: string;
+  /** The custom theme's gradient: 1 to 5 colors, angle in degrees, intensity 0 to 100. */
+  custom_colors: string[];
+  custom_angle: number;
+  custom_intensity: number;
   text_size: TextSize;
   reduce_transparency: boolean;
   /** `none`, a preset id from GRADIENTS, or `custom`. */

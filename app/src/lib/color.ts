@@ -68,3 +68,26 @@ export function contrast(a: string, b: string): number {
 export function onColor(bg: string): string {
   return contrast(bg, "#ffffff") >= 3 ? "#ffffff" : "#1d1d1f";
 }
+
+/** Hue (0..360), saturation and value (0..1), as colour pickers use them. */
+export function hexToHsv(hex: string): [number, number, number] {
+  const [r, g, b] = hexToRgb(hex).map((v) => v / 255) as Rgb;
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  const h = d === 0 ? 0 : max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, max === 0 ? 0 : d / max, max];
+}
+
+export function hsvToHex(h: number, s: number, v: number): string {
+  const f = (n: number) => {
+    const k = (n + h / 60) % 6;
+    return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+  };
+  return rgbToHex([f(5) * 255, f(3) * 255, f(1) * 255]);
+}
+
+/** The mean of some colours. */
+export function average(colors: string[]): string {
+  const rgb = colors.map(hexToRgb);
+  return rgbToHex([0, 1, 2].map((i) => rgb.reduce((sum, c) => sum + c[i]!, 0) / rgb.length) as Rgb);
+}
