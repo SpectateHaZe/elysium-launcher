@@ -131,7 +131,7 @@
     background: var(--bg);
     box-shadow: var(--shadow-float);
     z-index: 11;
-    animation: slide 420ms var(--ease-out);
+    animation: slide 600ms var(--spring);
   }
   header { display: flex; justify-content: flex-end; padding: 12px 12px 0; }
   .content { overflow-y: auto; padding: 0 32px 32px; display: flex; flex-direction: column; gap: 22px; }

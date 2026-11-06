@@ -12,6 +12,14 @@
   ] as const;
 
   const current = $derived(app.route.name === "logs" || app.route.name === "content" ? "home" : app.route.name);
+
+  // One highlight that slides to the active tab instead of each tab lighting up on its own.
+  let marks = $state<HTMLElement[]>([]);
+  const pillY = $derived.by(() => {
+    const i = items.findIndex((it) => it.route === current);
+    const el = marks[i];
+    return el ? el.offsetTop : null;
+  });
 </script>
 
 <nav class="rail" aria-label="Main">
@@ -19,9 +27,10 @@
     <img src={logo} alt="" width="44" height="44" />
   </div>
   <ul>
-    {#each items as item (item.route)}
+    {#if pillY !== null}<span class="pill" style:transform="translateY({pillY}px)" aria-hidden="true"></span>{/if}
+    {#each items as item, i (item.route)}
       {@const active = current === item.route}
-      <li>
+      <li bind:this={marks[i]}>
         <button
           class="dest"
           class:active
@@ -62,7 +71,20 @@
   }
   .mark { margin-bottom: 32px; }
   .mark img { display: block; filter: drop-shadow(0 4px 8px rgb(0 0 0 / 0.25)); }
-  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  ul { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .pill {
+    position: absolute;
+    top: 0;
+    left: 14px;
+    width: 52px;
+    height: 36px;
+    border-radius: 12px;
+    background: var(--label);
+    transition: transform 560ms var(--spring);
+    pointer-events: none;
+  }
+  /* Above the sliding highlight. */
+  .dest { position: relative; }
   .dest {
     appearance: none;
     border: 0;
@@ -83,14 +105,12 @@
     border-radius: 12px;
     display: grid;
     place-items: center;
-    transition: background-color 250ms var(--ease), color 250ms var(--ease), transform 250ms var(--ease);
+    transition: background-color 250ms var(--ease), color 300ms var(--ease), transform 520ms var(--spring);
   }
-  .dest:active .indicator { transform: scale(0.92); }
-  .dest.active .indicator { animation: settle 380ms var(--ease); }
-  @keyframes settle { from { transform: scale(0.8); } }
-  .dest:hover .indicator { background: var(--fill); }
+  .dest:active .indicator { transform: scale(0.9); transition-duration: 250ms, 300ms, 90ms; }
+  .dest:not(.active):hover .indicator { background: var(--fill); }
   .dest.active { color: var(--label); }
-  .dest.active .indicator { background: var(--label); color: var(--bg); }
+  .dest.active .indicator { color: var(--bg); }
   .dest:focus-visible { outline: none; }
   .dest:focus-visible .indicator { outline: 3px solid var(--accent); outline-offset: 2px; }
   .label { font-size: 11px; line-height: 14px; font-weight: 650; }

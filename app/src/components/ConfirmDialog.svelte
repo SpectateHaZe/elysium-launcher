@@ -42,7 +42,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    animation: rise 300ms var(--ease-out);
+    animation: rise 560ms var(--spring);
   }
   .headline { font-size: 26px; line-height: 32px; letter-spacing: -0.025em; }
   .check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--label-2); cursor: pointer; }

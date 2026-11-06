@@ -25,8 +25,18 @@
   import { updater } from "./lib/updater.svelte";
   import ContextMenu from "./components/ContextMenu.svelte";
   import ThemeEditor from "./components/ThemeEditor.svelte";
-  import { fade, fly } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
+  import { fade } from "svelte/transition";
+  import { quintOut } from "svelte/easing";
+
+  // Pages rise into place while the previous one fades away underneath.
+  function enter(_node: Element, { delay = 60 } = {}) {
+    return {
+      delay,
+      duration: 520,
+      easing: quintOut,
+      css: (t: number, u: number) => `opacity: ${t}; transform: translateY(${u * 14}px) scale(${0.99 + t * 0.01});`,
+    };
+  }
 
   const routeKey = $derived("id" in app.route ? `${app.route.name}:${app.route.id}` : app.route.name);
   import type { MenuItem } from "./lib/store.svelte";
@@ -159,7 +169,7 @@
     <Rail />
     <main>
       {#key routeKey}
-      <div class="page" in:fly={{ y: 10, duration: 360, easing: cubicOut }}>
+      <div class="page" in:enter out:fade={{ duration: 160 }}>
       {#if app.route.name === "home"}
         <Home />
       {:else if app.route.name === "logs"}
@@ -257,7 +267,7 @@
   :global([data-theme="light"]) .ambient img { opacity: 0.24; }
   @keyframes drift { to { transform: scale(1.12) translate(3%, -2%) rotate(4deg); } }
   @media (prefers-reduced-motion: reduce) { .ambient img { animation: none; } }
-  main { flex: 1; min-width: 0; height: 100%; }
-  .page { height: 100%; }
+  main { position: relative; flex: 1; min-width: 0; height: 100%; }
+  .page { position: absolute; inset: 0; }
   .fatal { padding: 64px; max-width: 640px; }
 </style>

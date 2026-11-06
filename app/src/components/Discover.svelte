@@ -153,10 +153,10 @@
     {/if}
 
     <ul class="results">
-      {#each hits as hit (key(hit))}
+      {#each hits as hit, n (key(hit))}
         {@const busy = pending.has(key(hit))}
         {@const have = installed.has(key(hit))}
-        <li>
+        <li class="hit" style:--n={Math.min(n, 14)}>
           <button class="row" onclick={() => (open = hit)}>
             {#if hit.icon_url}
               <img class="icon-img" src={hit.icon_url} alt="" loading="lazy" referrerpolicy="no-referrer" />
@@ -241,6 +241,8 @@
   .results { list-style: none; margin: 20px 0 0; padding: 0; }
   li { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--separator); }
   li:first-child { border-top: 0; }
+  li.hit { animation: arrive 520ms var(--spring) both; animation-delay: calc(var(--n, 0) * 22ms); }
+  @keyframes arrive { from { opacity: 0; translate: 0 10px; } }
   .row {
     appearance: none;
     border: 0;

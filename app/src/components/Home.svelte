@@ -565,9 +565,9 @@
     border-radius: 28px;
     margin-bottom: 14px;
     box-shadow: var(--shadow-card);
-    transition: transform 350ms var(--ease), box-shadow 250ms var(--ease), filter 150ms linear;
+    transition: transform 560ms var(--spring), box-shadow 300ms var(--ease), filter 150ms linear;
   }
-  .tile:hover .swatch { transform: translateY(-4px); box-shadow: 0 14px 30px rgb(0 0 0 / 0.14); }
+  .tile:hover .swatch { transform: translateY(-6px) scale(1.02); box-shadow: 0 14px 30px rgb(0 0 0 / 0.14); }
   .tile.selected .swatch { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--accent); }
   .tile:focus-visible { outline: none; }
   .tile:focus-visible .swatch { outline: 3px solid var(--accent); outline-offset: 6px; }

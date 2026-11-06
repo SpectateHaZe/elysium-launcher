@@ -264,7 +264,7 @@
     background: var(--bg);
     box-shadow: var(--shadow-float);
     z-index: 11;
-    animation: slide 400ms var(--ease-out);
+    animation: slide 600ms var(--spring);
   }
   header { display: flex; align-items: center; justify-content: space-between; padding: 20px 16px 8px 28px; }
   .content { overflow-y: auto; padding: 12px 28px 28px; display: flex; flex-direction: column; gap: 28px; }

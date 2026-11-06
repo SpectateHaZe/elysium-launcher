@@ -36,7 +36,7 @@
     color: #f5f5f7;
     font-weight: 600;
     box-shadow: var(--shadow-float);
-    animation: in 250ms var(--ease-out);
+    animation: in 520ms var(--spring);
   }
   .btn { color: var(--accent); }
   .snackbar :global(.body-m) { font-weight: 600; }

@@ -25,6 +25,8 @@
   /* Motion: the curve iOS uses for sheets and navigation. */
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  /* A soft spring: overshoots by about 3% and settles, for things that move into place. */
+  --spring: linear(0, 0.0175, 0.0688, 0.1475 7.3%, 0.3418 11.6%, 0.5598 16.2%, 0.7381 20.8%, 0.8632 25.4%, 0.9457 30.3%, 0.9953 35.4%, 1.0205 40.8%, 1.0279 46.5%, 1.0241 52.7%, 1.0148 59.6%, 1.0049 68.1%, 0.9988 80.3%, 1);
   --theme-shift: 600ms;
 
   /* Corner radii: larger containers get larger, softer corners. */
@@ -123,10 +125,14 @@ html, body {
 :focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 2px; }
 
 /* Hover feedback for custom controls. */
-.state { transition: filter 150ms linear, transform 150ms var(--ease), background-color 150ms linear; }
+.state { transition: filter 150ms linear, transform 520ms var(--spring), background-color 150ms linear; }
 .state:hover { filter: brightness(0.96); }
 :root[data-theme="dark"] .state:hover { filter: brightness(1.18); }
-.state:active { transform: scale(0.97); }
+/* Presses squeeze quickly and spring back on release. */
+.state:active { transform: scale(0.96); transition-duration: 150ms, 90ms, 150ms; }
+
+/* Dialog backdrops soften what's behind them. */
+.scrim { backdrop-filter: blur(6px); }
 
 /* ---------------------------------------------------------------------------
    Buttons: pills. Filled buttons carry the instance colour.

@@ -118,7 +118,7 @@
     width: min(600px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow-y: auto;
     padding: 28px; border-radius: 28px; background: var(--card); box-shadow: var(--shadow-float);
     display: flex; flex-direction: column; gap: 14px;
-    animation: rise 350ms var(--ease-out);
+    animation: rise 560ms var(--spring);
   }
   .headline { font-size: 34px; }
   .list { list-style: none; margin: 0; padding: 4px 16px; background: var(--bg); max-height: 360px; overflow-y: auto; }

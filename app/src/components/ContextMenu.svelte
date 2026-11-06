@@ -79,7 +79,8 @@
     display: flex;
     flex-direction: column;
     transform-origin: top left;
-    animation: pop 160ms var(--ease);
+    animation: pop 280ms var(--spring);
+    transform-origin: top left;
     outline: none;
   }
   :root[data-reduce-transparency="true"] .menu { background: var(--card); }

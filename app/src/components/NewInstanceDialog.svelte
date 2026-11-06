@@ -258,7 +258,7 @@
     border-radius: var(--shape-xl);
     background: var(--card);
     box-shadow: var(--shadow-float);
-    animation: rise 350ms var(--ease-out);
+    animation: rise 560ms var(--spring);
   }
   .form { display: contents; }
   .versions { display: flex; flex-direction: column; gap: 12px; min-height: 0; flex: 1; }
