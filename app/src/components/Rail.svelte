@@ -1,7 +1,7 @@
 <!-- Material 3 navigation rail. -->
 <script lang="ts">
   import { app } from "../lib/store.svelte";
-  import logo from "../assets/logo.png";
+  import logo from "../assets/logo.svg";
 
   const items = [
     { route: "home", icon: "home", label: "Home" },

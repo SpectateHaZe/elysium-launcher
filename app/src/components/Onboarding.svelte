@@ -1,6 +1,6 @@
 <!-- First run: how do you want to play? Signing in here is optional. -->
 <script lang="ts">
-  import logo from "../assets/logo.png";
+  import logo from "../assets/logo.svg";
   import { app } from "../lib/store.svelte";
   import { api, errorText, type Foreign } from "../lib/api";
 
