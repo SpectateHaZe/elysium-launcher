@@ -151,10 +151,15 @@ impl MicrosoftAuth {
             .await?;
         if resp.status().is_success() {
             let t: OAuthToken = resp.json().await?;
-            return self
-                .finish(&t.access_token, t.refresh_token)
-                .await
-                .map(Some);
+            // The code is spent now, so a failure from here on must not be retried as a
+            // network hiccup: polling again only gets "already used" and hides the reason.
+            return match self.finish(&t.access_token, t.refresh_token).await {
+                Ok(done) => Ok(Some(done)),
+                Err(Error::Http(e)) => Err(Error::Invalid(format!(
+                    "Signed in to Microsoft, but Minecraft's servers didn't answer ({e}). Try again."
+                ))),
+                Err(e) => Err(e),
+            };
         }
         let body: Value = resp.json().await.unwrap_or(Value::Null);
         match body.get("error").and_then(Value::as_str) {
@@ -163,10 +168,14 @@ impl MicrosoftAuth {
             Some("expired_token") => Err(Error::Invalid(
                 "The code expired. Start signing in again.".into(),
             )),
-            other => Err(Error::Invalid(format!(
-                "Microsoft sign-in failed ({}).",
-                other.unwrap_or("unknown")
-            ))),
+            other => {
+                let desc = body.get("error_description").and_then(Value::as_str);
+                Err(Error::Invalid(format!(
+                    "Microsoft sign-in failed ({}). {}",
+                    other.unwrap_or("unknown"),
+                    desc.and_then(|d| d.lines().next()).unwrap_or_default()
+                )))
+            }
         }
     }
 
@@ -273,7 +282,7 @@ impl MicrosoftAuth {
             access_token: String,
             expires_in: i64,
         }
-        let mc: McLogin = self
+        let mc = self
             .http
             .client()
             .post(format!(
@@ -282,10 +291,14 @@ impl MicrosoftAuth {
             ))
             .json(&json!({ "identityToken": format!("XBL3.0 x={uhs};{}", xsts.token) }))
             .send()
-            .await?
-            .error_for_status()?
-            .json()
             .await?;
+        // New Azure apps are refused here until Mojang approves them.
+        if mc.status() == reqwest::StatusCode::FORBIDDEN {
+            return Err(Error::Invalid(
+                "Minecraft hasn't approved this launcher's sign-in yet. Its Azure app needs Mojang's approval at aka.ms/mce-reviewappid.".into(),
+            ));
+        }
+        let mc: McLogin = mc.error_for_status()?.json().await?;
         let tokens = MicrosoftTokens {
             refresh_token,
             expires_at: Utc::now() + chrono::Duration::seconds(mc.expires_in.max(60)),

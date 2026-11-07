@@ -139,6 +139,23 @@ async fn child_account_gets_a_clear_message() {
     assert!(err.contains("child account"), "{err}");
 }
 
+#[tokio::test]
+async fn unapproved_app_is_explained_not_retried() {
+    let server = MockServer::start().await;
+    // Wins over the chain's 200 for the same path.
+    Mock::given(method("POST"))
+        .and(path("/mc/authentication/login_with_xbox"))
+        .respond_with(ResponseTemplate::new(403))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    mount_chain(&server, false).await;
+    let auth = auth(&server);
+    let code = auth.start().await.unwrap();
+    let err = auth.wait(&code, || false).await.unwrap_err().to_string();
+    assert!(err.contains("Mojang"), "{err}");
+}
+
 #[test]
 fn missing_client_id_is_explained() {
     let err = MicrosoftAuth::new(Http::new().unwrap(), " ")

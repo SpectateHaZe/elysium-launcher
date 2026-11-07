@@ -198,7 +198,7 @@
   <section>
     <h2 class="title-l">Accounts and services</h2>
     <div class="group">
-      <Row title="Microsoft client ID" description="The Azure app ID Mojang approved for this launcher. Needed for Microsoft sign-in.">
+      <Row title="Microsoft client ID" description="Elysium signs in with its own. Leave this empty unless you have your own Azure app.">
         {#snippet below()}
           <label class="field">
             <input value={s.msa_client_id} placeholder=" " spellcheck="false" autocomplete="off" onchange={(e) => set({ msa_client_id: e.currentTarget.value.trim() })} />

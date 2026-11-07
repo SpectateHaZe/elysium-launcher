@@ -9,8 +9,9 @@ use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
 
 /// Elysium's Discord application (public, not a secret). A build can point at another.
 const APP_ID: Option<&str> = match option_env!("ELYSIUM_DISCORD_APP_ID") {
-    Some(id) => Some(id),
-    None => Some("1568200385967951902"),
+    // CI passes an empty value when the secret isn't set.
+    Some(id) if !id.is_empty() => Some(id),
+    _ => Some("1568200385967951902"),
 };
 
 #[derive(Default)]

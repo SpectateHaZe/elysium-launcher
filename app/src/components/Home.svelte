@@ -479,6 +479,7 @@
     height: 100%;
     object-fit: cover;
     filter: blur(48px) saturate(1.4);
+    will-change: transform;
     opacity: 0.32;
     transform: scale(1.2);
     -webkit-mask-image: linear-gradient(to right, transparent 10%, #000 70%);
@@ -551,9 +552,8 @@
     position: absolute;
     top: 50%;
     translate: 0 -50%;
-    background: rgb(0 0 0 / 0.45);
+    background: rgb(0 0 0 / 0.55);
     color: #fff;
-    backdrop-filter: blur(12px);
     opacity: 0;
     transition: opacity 0.2s ease;
   }
@@ -631,8 +631,7 @@
     line-height: 18px;
     font-weight: 700;
     color: #fff;
-    background: rgb(0 0 0 / 0.55);
-    backdrop-filter: blur(8px);
+    background: rgb(0 0 0 / 0.62);
   }
   .live::before {
     content: "";
@@ -655,8 +654,7 @@
     display: grid;
     place-items: center;
     color: #fff;
-    background: rgb(0 0 0 / 0.5);
-    backdrop-filter: blur(8px);
+    background: rgb(0 0 0 / 0.6);
   }
   .badge .icon { font-size: 17px; }
   .cell { position: relative; }

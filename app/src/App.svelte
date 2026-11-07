@@ -261,12 +261,12 @@
     height: 130%;
     object-fit: cover;
     filter: blur(96px) saturate(1.5);
+    will-change: transform;
     opacity: 0.34;
-    animation: drift 60s ease-in-out infinite alternate;
+    /* Kept still on purpose: animating a window-sized blur redraws every frame and
+       keeps the GPU busy (about 10%) while the launcher just sits there. */
   }
   :global([data-theme="light"]) .ambient img { opacity: 0.24; }
-  @keyframes drift { to { transform: scale(1.12) translate(3%, -2%) rotate(4deg); } }
-  @media (prefers-reduced-motion: reduce) { .ambient img { animation: none; } }
   main { position: relative; flex: 1; min-width: 0; height: 100%; }
   .page { position: absolute; inset: 0; }
   .fatal { padding: 64px; max-width: 640px; }

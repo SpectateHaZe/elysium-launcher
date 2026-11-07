@@ -47,11 +47,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          # Built into the app, like Prism's CurseForge key. Optional: missing secrets
-          # just leave the feature for users to configure.
+          # Built into the app so CurseForge works out of the box. Optional.
           ELYSIUM_CURSEFORGE_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
-          ELYSIUM_MSA_CLIENT_ID: ${{ secrets.MSA_CLIENT_ID }}
-          ELYSIUM_DISCORD_APP_ID: ${{ secrets.DISCORD_APP_ID }}
         with:
           projectPath: app
           tagName: v${{ env.VERSION }}

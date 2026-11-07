@@ -141,7 +141,7 @@ pub struct Settings {
     pub appearance: Appearance,
     /// Close the launcher window while the game is running.
     pub hide_on_launch: bool,
-    /// Azure application (client) ID used for Microsoft sign-in.
+    /// Azure application (client) ID used for Microsoft sign-in. Empty uses Elysium's own.
     pub msa_client_id: String,
     /// Install new Horizon nightlies automatically.
     pub horizon_auto_update: bool,
@@ -163,6 +163,23 @@ pub struct Settings {
     pub discord_presence: bool,
 }
 
+/// Elysium's Azure app (public, not a secret). A build can point at another.
+pub const MSA_CLIENT_ID: &str = match option_env!("ELYSIUM_MSA_CLIENT_ID") {
+    // CI passes an empty value when the secret isn't set.
+    Some(id) if !id.is_empty() => id,
+    _ => "ff007459-d571-490f-a848-eebe999906c8",
+};
+
+impl Settings {
+    /// The client ID to sign in with: the user's own, or Elysium's.
+    pub fn msa_client_id(&self) -> &str {
+        match self.msa_client_id.trim() {
+            "" => MSA_CLIENT_ID,
+            id => id,
+        }
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -175,9 +192,7 @@ impl Default for Settings {
             theme: Theme::System,
             appearance: Appearance::default(),
             hide_on_launch: false,
-            msa_client_id: option_env!("ELYSIUM_MSA_CLIENT_ID")
-                .unwrap_or_default()
-                .to_owned(),
+            msa_client_id: String::new(),
             horizon_auto_update: true,
             onboarded: false,
             always_official_launcher: false,

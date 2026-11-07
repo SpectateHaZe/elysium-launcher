@@ -78,7 +78,7 @@ impl AppState {
     }
 
     fn msa(&self) -> CmdResult<MicrosoftAuth> {
-        MicrosoftAuth::new(self.http.clone(), &lock(&self.settings).msa_client_id).map_err(err)
+        MicrosoftAuth::new(self.http.clone(), lock(&self.settings).msa_client_id()).map_err(err)
     }
 
     fn install_options(&self, java_path: Option<PathBuf>, verify: Verify) -> InstallOptions {

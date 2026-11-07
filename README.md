@@ -1,93 +1,82 @@
-# Elysium Launcher
+<p align="center">
+  <img src=".github/logo.png" alt="" width="120">
+</p>
 
-A fast, modern Minecraft launcher written in Rust, with a Tauri desktop UI.
+<h1 align="center">Elysium Launcher</h1>
 
-## Features
+<p align="center">A Minecraft launcher for Windows, written in Rust with a Tauri and Svelte front end.</p>
 
-- **Every vanilla version**, from the newest snapshot back to `rd-132211`, including the old asset
-  layouts and native libraries.
-- **Mod loaders:** Fabric, Quilt, Forge and NeoForge, with every version they publish. Old Forge
-  (1.12.2 and earlier) is installed natively; newer Forge and NeoForge run their official installer.
-- **Discover:** search Modrinth and CurseForge together for mods, modpacks, resource packs, shaders
-  and data packs, filtered to the instance's Minecraft version and loader. Required dependencies are
-  installed too.
-- **CurseForge fallback chain:** when an author disables third-party downloads, the identical file is
-  fetched from Modrinth (matched by SHA-1); if it isn't there, the player downloads it from the
-  CurseForge page and the launcher picks it up from the Downloads folder, checking the hash.
-- **Modpacks:** install from Modrinth or CurseForge, import `.mrpack` and CurseForge zips, export any
-  instance as a `.mrpack`.
-- **Content manager:** enable, disable, remove and update installed mods, resource packs and shaders.
-- **Accounts:** Microsoft sign-in (device code), skins (view and upload), and offline accounts.
-  Refresh tokens are kept in the system credential store, never in plain files.
-- **Horizon:** start [Horizon](https://github.com/horizon-rust/horizon), the Rust reimplementation of
-  Java Edition, through its Launch API. Builds update automatically; every download is checked against
-  Horizon's Ed25519-signed checksums before it is installed. Horizon requires a Microsoft account that
-  owns Java Edition.
-- **Play without signing in here:** like the CurseForge app, Elysium can hand the game to the
-  official Minecraft Launcher, which signs you in. Microsoft sign-in in Elysium is optional, and
-  offline accounts still work for singleplayer.
-- **Crash helper:** explains crashes in plain words (missing mods, out of memory, wrong Java,
-  driver problems, mod conflicts) with one-click fixes.
-- **Import** instances from Prism Launcher, MultiMC, the CurseForge app and the official launcher.
-- **World backups** before playing (once a day) with one-click restore; **Discord** presence.
-- **Sensible defaults:** memory sized to your PC, tuned Java flags, and optional performance mods
-  (Sodium, Lithium, FerriteCore and more) for new Fabric and Quilt instances.
-- **Updates itself** from GitHub releases; every update is signed.
-- **Automatic Java:** each version gets the exact Mojang Java runtime it was built for.
-- **Instances** with their own memory, Java, JVM arguments and window size; live colour-coded game
-  log; playtime tracking.
-- **Apple-style themes:** light, dark or automatic; seven palettes plus a custom one built from any
-  tint; Apple system accents or your own; text size and reduced transparency.
+<p align="center"><a href="https://github.com/SpectateHaZe/elysium-launcher/releases/latest">Download the latest release</a></p>
 
-## Setup (repository secrets)
+## What it does
 
-Releases are built by `.github/workflows/release.yml` on every push to `main`. Add these
-repository secrets (Settings, Secrets and variables, Actions):
+Elysium installs and runs any Minecraft: Java Edition version, from the newest snapshot back to
+`rd-132211`, with Fabric, Quilt, Forge or NeoForge. Each instance has its own mods, memory, Java and
+settings, and gets the Java runtime Mojang built that version for, downloaded on first launch.
 
-| Secret | What it does |
-| --- | --- |
-| `TAURI_SIGNING_PRIVATE_KEY` | Signs updates so installed launchers accept them. Required for auto-updates. |
-| `CURSEFORGE_API_KEY` | Built into the app so CurseForge works out of the box (apply at console.curseforge.com). |
-| `MSA_CLIENT_ID` | Azure app ID approved by Mojang, for optional Microsoft sign-in in Elysium. |
-| `DISCORD_APP_ID` | Discord application ID for Rich Presence (optional). |
+You can search Modrinth and CurseForge from one place. Results are filtered to the instance's game
+version and loader, and required dependencies come along. Some CurseForge authors block third-party
+downloads; in that case Elysium looks for the identical file on Modrinth by its hash, and if it isn't
+there, asks you to download it from CurseForge and picks it up from your Downloads folder.
 
-Auto-updates download from this repository's releases, so the repository (or a separate
-releases repository) must be public for installed launchers to see new versions.
+Modpacks install from either site, or from a `.mrpack` or CurseForge zip. Any instance can be exported
+as a `.mrpack`.
 
-## Layout
+To play a modpack with friends, share it from the instance settings and send them the code. Your PC
+serves the pack, and their copy follows yours: mods you add, update or remove are synced the next time
+they press Play. Elysium tries to open the port on your router itself (UPnP). If that fails, friends on
+the same network can still join.
 
-| Path | What it is |
-| --- | --- |
-| `crates/elysium-core` | UI-independent library: metadata, downloads, Java, install, launch |
-| `app/src-tauri` | Tauri shell exposing the core to the UI as commands |
-| `app/src` | Svelte 5 + TypeScript frontend |
+Other things it handles:
+
+- Microsoft and offline accounts, with skin upload. Sign-in tokens live in the system credential
+  store.
+- Playing through the official Minecraft Launcher instead, if you'd rather not sign in here.
+- Crash reports explained in plain words, with a fix button for the common cases (missing mods,
+  out of memory, wrong Java).
+- Importing instances from Prism Launcher, MultiMC, the CurseForge app and the official launcher.
+- A daily world backup before you play, with one-click restore.
+- [Horizon](https://github.com/horizon-rust/horizon), the Rust reimplementation of Java Edition.
+  Builds update automatically and are checked against Horizon's signed checksums.
+- Discord Rich Presence, light and dark themes, custom palettes, and signed automatic updates.
+
+Microsoft sign-in inside Elysium is waiting on Mojang's approval of the app. Until then, use offline
+accounts or start the game through the official launcher.
 
 ## Building
 
-Requirements: Rust (see `rust-version` in `Cargo.toml`), Node.js 22, and on Linux the
-WebKitGTK development packages (`libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsoup-3.0-dev`).
+You need Rust (version in `Cargo.toml`) and Node.js 22. On Linux, also install
+`libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsoup-3.0-dev`.
 
 ```bash
 cd app
 npm ci
-npx tauri dev      # run with hot reload
-npx tauri build    # installers in target/release/bundle
+npx tauri dev
 ```
 
-Tests:
+`npx tauri build` makes the installers. Run the tests with `cargo test --workspace`.
+
+To check the install pipeline without the UI:
 
 ```bash
-cargo test --workspace
+cargo run -p elysium-core --example launch -- 1.20.4 60
 ```
 
-`cargo run -p elysium-core --example launch -- 1.20.4 60` installs a version into a
-throwaway instance and runs it for 60 seconds, which is useful for checking the install
-pipeline without the UI. Set `ELYSIUM_HOME` to keep it away from your real data folder.
+This installs 1.20.4 into a throwaway instance and runs it for 60 seconds. Set `ELYSIUM_HOME` to keep
+it out of your real data folder, which is `%APPDATA%\ElysiumLauncher` on Windows.
 
-Data lives in `%APPDATA%\ElysiumLauncher` on Windows (or `$ELYSIUM_HOME` if set).
+The code is split in two. `crates/elysium-core` has everything that isn't UI: metadata, downloads,
+Java, installing, launching, mods and sync. `app` is the Tauri shell (`app/src-tauri`) and the Svelte
+front end (`app/src`).
+
+## Releases
+
+Every push to `main` builds and publishes a release through `.github/workflows/release.yml`. Two
+repository secrets are used if present: `TAURI_SIGNING_PRIVATE_KEY` signs updates, and
+`CURSEFORGE_API_KEY` builds in a CurseForge key. Without them the build still works, but without
+auto-update files or built-in CurseForge search.
 
 ## Licence
 
-Dual-licensed under MIT or Apache-2.0, at your option.
-Bundled fonts and icons keep their own licences: Roboto Flex (SIL OFL 1.1) and
-Material Symbols (Apache-2.0), shipped from their npm packages.
+MIT or Apache-2.0, at your option. Roboto Flex (SIL OFL 1.1) and Material Symbols (Apache-2.0) keep
+their own licences.

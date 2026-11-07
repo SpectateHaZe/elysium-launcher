@@ -2,46 +2,60 @@
 <script lang="ts">
   import { app } from "../lib/store.svelte";
   import { api, errorText } from "../lib/api";
+  import { listen } from "@tauri-apps/api/event";
 
   let code = $state<{ user_code: string; verification_uri: string } | null>(null);
   let error = $state<string | null>(null);
   let copied = $state(false);
 
+  // Plain page on purpose: prefilling the code (?otc=) sends Microsoft down a route only
+  // its own apps may use, and sign-in fails with "first party application".
+  const link = $derived(code?.verification_uri ?? "");
+
+  async function copy() {
+    if (!code) return;
+    copied = await navigator.clipboard.writeText(code.user_code).then(() => true, () => false);
+  }
+
+  async function start() {
+    error = null;
+    code = null;
+    copied = false;
+    try {
+      code = await api.msaStart();
+      // Ready to paste on Microsoft's page.
+      await copy();
+      void api.openUrl(link).catch(() => {});
+    } catch (e) {
+      error = errorText(e);
+    }
+  }
+
+  async function check() {
+    const s = await api.msaStatus().catch(() => null);
+    if (s?.kind === "done") {
+      app.accounts = s.accounts;
+      app.toast(`Signed in as ${app.activeAccount?.username ?? "your account"}`);
+      app.dialog = null;
+    } else if (s?.kind === "failed") {
+      error = s.message;
+    }
+  }
+
   $effect(() => {
-    let stop = false;
-    api.msaStart()
-      .then((c) => {
-        code = c;
-        void api.openUrl(c.verification_uri).catch(() => {});
-      })
-      .catch((e) => (error = errorText(e)));
-    const t = setInterval(async () => {
-      if (stop) return;
-      const s = await api.msaStatus().catch(() => null);
-      if (s?.kind === "done") {
-        app.accounts = s.accounts;
-        app.toast(`Signed in as ${app.activeAccount?.username ?? "your account"}`);
-        app.dialog = null;
-      } else if (s?.kind === "failed") {
-        error = s.message;
-      }
-    }, 1500);
+    void start();
+    // The backend says when it's done; the timer is only a fallback.
+    const off = listen("msa-finished", () => void check());
+    const t = setInterval(() => void check(), 3000);
     return () => {
-      stop = true;
       clearInterval(t);
+      void off.then((f) => f());
     };
   });
 
   function close() {
     void api.msaCancel();
     app.dialog = null;
-  }
-
-  async function copy() {
-    if (!code) return;
-    await navigator.clipboard.writeText(code.user_code);
-    copied = true;
-    setTimeout(() => (copied = false), 1500);
   }
 </script>
 
@@ -50,20 +64,24 @@
 <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="msa-title">
   <h2 class="title-l" id="msa-title">Sign in with Microsoft</h2>
   {#if error}
-    <p class="body-m error">{error}</p>
+    <p class="body-m error" role="alert">{error}</p>
     {#if error.includes("client ID")}
       <button class="btn tonal state" onclick={() => { close(); app.route = { name: "settings" }; }}>Open Settings</button>
     {/if}
   {:else if !code}
-    <p class="body-m muted">Contacting Microsoft</p>
+    <div class="waiting" role="status"><span class="spinner"></span><span class="body-m muted">Contacting Microsoft</span></div>
   {:else}
-    <p class="body-m muted">A browser window opened. Sign in there and enter this code:</p>
-    <button class="code" onclick={copy} title="Copy code">{code.user_code}</button>
-    <p class="body-s muted">{copied ? "Copied" : "Click the code to copy it."} Didn't open? Go to {code.verification_uri}.</p>
-    <div class="waiting"><span class="spinner"></span><span class="body-m muted">Waiting for you to finish signing in</span></div>
+    <p class="body-m muted">A browser window opened. Paste this code there (it's already copied), then sign in:</p>
+    <button class="code" onclick={copy} aria-label="Copy code {code.user_code}">{code.user_code}</button>
+    <p class="body-s muted" aria-live="polite">{copied ? "Code copied." : "Click the code to copy it."} Browser didn't open? Go to {code.verification_uri}.</p>
+    <div class="waiting" role="status"><span class="spinner"></span><span class="body-m muted">Waiting for you to finish signing in</span></div>
   {/if}
   <div class="buttons">
-    {#if code}<button class="btn text state" onclick={() => api.openUrl(code!.verification_uri)}>Open again</button>{/if}
+    {#if error}
+      <button class="btn filled state" onclick={start}>Try again</button>
+    {:else if code}
+      <button class="btn text state" onclick={() => api.openUrl(link)}>Open browser again</button>
+    {/if}
     <button class="btn tonal state" onclick={close}>Cancel</button>
   </div>
 </div>
